@@ -316,17 +316,17 @@ function App() {
     };
 
     const handleDeleteRefereeTrainingData = async () => {
-        if (!window.confirm('¿Estás seguro de que quieres eliminar todos los datos de entrenamiento de árbitros? Esta acción no se puede deshacer.')) {
+        if (!window.confirm('Are you sure you want to delete all referee training data? This action cannot be undone.')) {
             return;
         }
         
-        setDeleteRefereeMsg('Eliminando...');
+        setDeleteRefereeMsg('Deleting...');
         try {
             const res = await fetch(`${BACKEND_URL}/api/delete_referee_training_data`, { method: 'POST' });
             const data = await res.json();
             
             if (data.status === 'success') {
-                setDeleteRefereeMsg(`Eliminados ${data.deleted_count} archivos de entrenamiento de árbitros`);
+                setDeleteRefereeMsg(`Deleted ${data.deleted_count} referee training files`);
                 fetchDashboardData(); // Refresh counts
             } else {
                 setDeleteRefereeMsg(`Error: ${data.error || 'Failed to delete referee training data'}`);
@@ -337,17 +337,17 @@ function App() {
     };
 
     const handleDeleteSignalTrainingData = async () => {
-        if (!window.confirm('¿Estás seguro de que quieres eliminar todos los datos de entrenamiento de señales? Esta acción no se puede deshacer.')) {
+        if (!window.confirm('Are you sure you want to delete all signal training data? This action cannot be undone.')) {
             return;
         }
         
-        setDeleteSignalMsg('Eliminando...');
+        setDeleteSignalMsg('Deleting...');
         try {
             const res = await fetch(`${BACKEND_URL}/api/delete_signal_training_data`, { method: 'POST' });
             const data = await res.json();
             
             if (data.status === 'success') {
-                setDeleteSignalMsg(`Eliminados ${data.deleted_count} archivos de entrenamiento de señales`);
+                setDeleteSignalMsg(`Deleted ${data.deleted_count} signal training files`);
                 fetchDashboardData(); // Refresh counts
             } else {
                 setDeleteSignalMsg(`Error: ${data.error || 'Failed to delete signal training data'}`);
