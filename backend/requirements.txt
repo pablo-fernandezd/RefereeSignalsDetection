@@ -1,0 +1,11 @@
+Flask==2.3.3
+Flask-CORS==4.0.0
+yt-dlp==2023.11.16
+opencv-python==4.8.1.78
+torch==2.1.0
+torchvision==0.16.0
+ultralytics==8.0.196
+Pillow==10.0.1
+numpy==1.24.3
+PyYAML==6.0.1
+pathlib2==2.3.7 

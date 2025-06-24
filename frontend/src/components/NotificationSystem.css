@@ -1,0 +1,123 @@
+.notification-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 400px;
+}
+
+.notification {
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    padding: 16px;
+    border-left: 4px solid;
+    animation: slideIn 0.3s ease-out;
+    position: relative;
+    overflow: hidden;
+}
+
+.notification::before {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 2px;
+    background: currentColor;
+    animation: progressBar 4s linear;
+}
+
+.notification-success {
+    border-left-color: #27ae60;
+    color: #27ae60;
+}
+
+.notification-success::before {
+    background: #27ae60;
+}
+
+.notification-error {
+    border-left-color: #e74c3c;
+    color: #e74c3c;
+}
+
+.notification-error::before {
+    background: #e74c3c;
+}
+
+.notification-warning {
+    border-left-color: #f39c12;
+    color: #f39c12;
+}
+
+.notification-warning::before {
+    background: #f39c12;
+}
+
+.notification-info {
+    border-left-color: #3498db;
+    color: #3498db;
+}
+
+.notification-info::before {
+    background: #3498db;
+}
+
+.notification-content {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.notification-icon {
+    font-size: 18px;
+    font-weight: bold;
+    flex-shrink: 0;
+}
+
+.notification-message {
+    color: #2c3e50;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 1.4;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes progressBar {
+    from {
+        width: 100%;
+    }
+    to {
+        width: 0%;
+    }
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .notification-container {
+        left: 20px;
+        right: 20px;
+        max-width: none;
+    }
+    
+    .notification {
+        padding: 12px;
+    }
+    
+    .notification-message {
+        font-size: 13px;
+    }
+} 

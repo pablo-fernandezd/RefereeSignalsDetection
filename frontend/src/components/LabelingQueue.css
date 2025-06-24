@@ -1,0 +1,271 @@
+.labeling-queue {
+    background-color: var(--surface-elevated);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-xl);
+    box-shadow: var(--shadow-md);
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.labeling-queue h2 {
+    color: var(--text-primary);
+    margin-bottom: var(--spacing-xl);
+    text-align: center;
+    font-size: 1.5rem;
+    font-weight: 600;
+}
+
+.queue-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-lg);
+    padding: var(--spacing-lg);
+    background-color: var(--surface-secondary);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--surface-border);
+    flex-wrap: wrap;
+    gap: var(--spacing-md);
+}
+
+.queue-info {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-md);
+}
+
+.queue-count {
+    background-color: var(--interactive-primary);
+    color: var(--text-inverse);
+    padding: var(--spacing-xs) var(--spacing-md);
+    border-radius: var(--radius-lg);
+    font-weight: 600;
+    font-size: 0.875rem;
+}
+
+.queue-status {
+    color: var(--text-secondary);
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.queue-actions {
+    display: flex;
+    gap: var(--spacing-md);
+    align-items: center;
+}
+
+.queue-button {
+    background-color: var(--interactive-primary);
+    color: var(--text-inverse);
+    border: none;
+    border-radius: var(--radius-md);
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+}
+
+.queue-button:hover {
+    background-color: var(--interactive-hover);
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-md);
+}
+
+.queue-button:active {
+    background-color: var(--interactive-active);
+    transform: translateY(0);
+}
+
+.queue-button:disabled {
+    background-color: var(--interactive-disabled);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.queue-button.secondary {
+    background-color: var(--surface-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--surface-border);
+}
+
+.queue-button.secondary:hover {
+    background-color: var(--surface-tertiary);
+    border-color: var(--interactive-primary);
+    color: var(--interactive-primary);
+}
+
+.queue-button.success {
+    background-color: var(--success-color);
+}
+
+.queue-button.success:hover {
+    background-color: var(--success-hover);
+}
+
+.queue-button.warning {
+    background-color: var(--warning-color);
+}
+
+.queue-button.warning:hover {
+    background-color: var(--warning-hover);
+}
+
+.queue-button.error {
+    background-color: var(--error-color);
+}
+
+.queue-button.error:hover {
+    background-color: var(--error-hover);
+}
+
+.queue-item {
+    background-color: var(--surface-primary);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-lg);
+    padding: var(--spacing-lg);
+    margin-bottom: var(--spacing-lg);
+    transition: all var(--transition-normal);
+}
+
+.queue-item:hover {
+    border-color: var(--interactive-primary);
+    box-shadow: var(--shadow-md);
+}
+
+.queue-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--spacing-md);
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+}
+
+.queue-item-name {
+    color: var(--text-primary);
+    font-weight: 600;
+    font-size: 1rem;
+    word-break: break-all;
+}
+
+.queue-item-actions {
+    display: flex;
+    gap: var(--spacing-sm);
+    align-items: center;
+}
+
+.queue-item-image {
+    max-width: 100%;
+    height: auto;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--surface-border);
+    background-color: var(--background-secondary);
+}
+
+.empty-queue {
+    text-align: center;
+    padding: var(--spacing-2xl);
+    color: var(--text-muted);
+}
+
+.empty-queue h3 {
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-md);
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.empty-queue p {
+    color: var(--text-muted);
+    font-size: 1rem;
+    margin: 0;
+}
+
+.loading {
+    text-align: center;
+    padding: var(--spacing-2xl);
+    font-size: 1.125rem;
+    color: var(--text-secondary);
+}
+
+.error-message {
+    text-align: center;
+    padding: var(--spacing-lg);
+    background-color: var(--error-light);
+    color: var(--error-dark);
+    border: 1px solid var(--error-color);
+    border-radius: var(--radius-lg);
+    margin: var(--spacing-lg) 0;
+    font-weight: 500;
+}
+
+.success-message {
+    text-align: center;
+    padding: var(--spacing-lg);
+    background-color: var(--success-light);
+    color: var(--success-dark);
+    border: 1px solid var(--success-color);
+    border-radius: var(--radius-lg);
+    margin: var(--spacing-lg) 0;
+    font-weight: 500;
+}
+
+.back-button {
+    background-color: var(--surface-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--surface-border);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-xs);
+    margin-bottom: var(--spacing-lg);
+}
+
+.back-button:hover {
+    background-color: var(--surface-tertiary);
+    border-color: var(--interactive-primary);
+    color: var(--interactive-primary);
+}
+
+.back-button::before {
+    content: "←";
+    font-weight: bold;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .queue-header {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .queue-info {
+        justify-content: center;
+    }
+    
+    .queue-actions {
+        justify-content: center;
+    }
+    
+    .queue-item-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .queue-item-actions {
+        justify-content: center;
+    }
+} 

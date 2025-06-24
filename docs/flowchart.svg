@@ -1,0 +1,93 @@
+<svg width="1100" height="420" xmlns="http://www.w3.org/2000/svg"> <defs>
+        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#333" />
+        </marker>
+         <marker id="arrowhead-loop" markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
+            <polygon points="0 0, 10 3.5, 0 7" fill="#e53935" />
+        </marker>
+    </defs>
+
+    <style>
+        .process { fill: #e1f5fe; stroke: #0277bd; stroke-width: 1; }
+        .data { fill: #fff9c4; stroke: #f57f17; stroke-width: 1; }
+        .start-end { fill: #e8f5e9; stroke: #2e7d32; stroke-width: 1; }
+        .decision { fill: #ffe0b2; stroke: #e65100; stroke-width: 1; }
+        .text-content { font-family: Arial, sans-serif; font-size: 11px; text-anchor: middle; fill: #333; }
+        .text-content tspan { dominant-baseline: central; }
+        .connector { fill: none; stroke: #333; stroke-width: 1.5; marker-end: url(#arrowhead); }
+        .loopback { fill: none; stroke: #e53935; stroke-width: 1.5; marker-end: url(#arrowhead-loop); stroke-dasharray: 5, 5; }
+    </style>
+
+    <rect id="node-start" x="20" y="20" width="140" height="50" rx="10" ry="10" class="start-end" />
+    <text x="90" y="45" class="text-content">Start: Define Needs</text>
+
+    <rect id="node-select" x="20" y="100" width="140" height="70" rx="5" ry="5" class="process" />
+    <text x="90" y="128" class="text-content">
+        <tspan x="90" dy="0">Select Video Sources</tspan>
+        <tspan x="90" dy="14">(YouTube, FIVB, etc.)</tspan>
+    </text>
+
+    <polygon id="node-decision" points="90,210 160,245 90,280 20,245" class="decision" />
+    <text x="90" y="245" class="text-content">
+        <tspan x="90" dy="-7">Results</tspan>
+        <tspan x="90" dy="14">Good Enough?</tspan>
+    </text>
+
+    <rect id="node-end" x="20" y="320" width="140" height="50" rx="10" ry="10" class="start-end" />
+     <text x="90" y="345" class="text-content">End: Final Dataset / Models</text>
+
+    <rect id="node-download" x="220" y="100" width="130" height="70" rx="5" ry="5" class="process" />
+    <text x="285" y="128" class="text-content">
+        <tspan x="285" dy="0">Download Videos</tspan>
+        <tspan x="285" dy="14">(Script:</tspan>
+        <tspan x="285" dy="14">'descargador.py')</tspan>
+    </text>
+
+    <rect id="node-raw-videos" x="380" y="100" width="130" height="70" class="data" />
+    <text x="445" y="135" class="text-content">Raw Video Files</text>
+
+    <rect id="node-process" x="540" y="100" width="130" height="70" rx="5" ry="5" class="process" />
+    <text x="605" y="121" class="text-content">
+        <tspan x="605" dy="0">Process Videos</tspan>
+        <tspan x="605" dy="14">(Split: 'ffmpeg',</tspan>
+        <tspan x="605" dy="14">Detect/Crop: YOLO</tspan>
+        <tspan x="605" dy="14">'refereeDetection.ipynb')</tspan>
+    </text>
+
+    <rect id="node-cropped-images" x="700" y="100" width="130" height="70" class="data" />
+    <text x="765" y="135" class="text-content">Raw Cropped Images</text>
+
+    <rect id="node-annotate" x="860" y="100" width="130" height="70" rx="5" ry="5" class="process" />
+    <text x="925" y="128" class="text-content">
+        <tspan x="925" dy="0">Annotate Data</tspan>
+        <tspan x="925" dy="14">(Manual/Roboflow)</tspan>
+        <tspan x="925" dy="14">(*+/- Auto-Label?*)</tspan>
+    </text>
+
+    <rect id="node-labeled-data" x="860" y="210" width="130" height="70" class="data" />
+    <text x="925" y="245" class="text-content">Labeled Dataset</text>
+
+    <rect id="node-split" x="700" y="210" width="130" height="70" rx="5" ry="5" class="process" />
+    <text x="765" y="238" class="text-content">
+        <tspan x="765" dy="0">Split Dataset</tspan>
+        <tspan x="765" dy="14">(Train / Val / Test)</tspan>
+        <tspan x="765" dy="14">and Augment</tspan>
+    </text>
+
+    <rect id="node-train" x="540" y="210" width="130" height="70" rx="5" ry="5" class="process" />
+    <text x="605" y="238" class="text-content">
+        <tspan x="605" dy="0">Train Models</tspan>
+        <tspan x="605" dy="14">(YOLOv12 - Detect)</tspan>
+        <tspan x="605" dy="14">(YOLOv11 - Classify)</tspan>
+    </text>
+
+    <rect id="node-evaluate" x="380" y="210" width="130" height="70" rx="5" ry="5" class="process" />
+    <text x="445" y="245" class="text-content">Evaluate Models</text>
+
+
+    <path class="connector" d="M 90 70 L 90 100" /> <path class="connector" d="M 160 135 L 220 135" /> <path class="connector" d="M 350 135 L 380 135" /> <path class="connector" d="M 510 135 L 540 135" /> <path class="connector" d="M 670 135 L 700 135" /> <path class="connector" d="M 830 135 L 860 135" /> <path class="connector" d="M 925 170 L 925 210" /> <path class="connector" d="M 860 245 L 830 245" /> <path class="connector" d="M 700 245 L 670 245" /> <path class="connector" d="M 540 245 L 510 245" /> <path class="connector" d="M 380 245 L 160 245" /> <path class="connector" d="M 90 280 L 90 320" /> <text x="105" y="300" class="text-content" font-size="10">Yes</text>
+
+    <path class="loopback" d="M 90 210 L 90 170" /> <text x="75" y="195" class="text-content" font-size="10">No</text>
+
+
+</svg>
