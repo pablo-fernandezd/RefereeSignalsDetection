@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 1
+names: ['referee']
+
+roboflow:
+  workspace: windows-v2s2h
+  project: referee-detection-dxq97
+  version: 9
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/windows-v2s2h/referee-detection-dxq97/dataset/9

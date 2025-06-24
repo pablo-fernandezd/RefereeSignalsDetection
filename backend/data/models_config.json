@@ -1,0 +1,25 @@
+{
+  "referee": {
+    "type": "detection",
+    "data_dir": "referee_training_data",
+    "classes": [
+      "referee"
+    ],
+    "task": "object_detection"
+  },
+  "signal": {
+    "type": "detection",
+    "data_dir": "signal_training_data",
+    "classes": [
+      "armLeft",
+      "armRight",
+      "hits",
+      "leftServe",
+      "net",
+      "outside",
+      "rightServe",
+      "touched"
+    ],
+    "task": "signal_detection"
+  }
+}

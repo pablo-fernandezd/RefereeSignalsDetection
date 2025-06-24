@@ -1,0 +1,19 @@
+names:
+- armLeft
+- armRight
+- hits
+- leftServe
+- net
+- outside
+- rightServe
+- touched
+nc: 8
+roboflow:
+  license: CC BY 4.0
+  project: voleibol-signals
+  url: https://universe.roboflow.com/windows-v2s2h/voleibol-signals/dataset/23
+  version: 23
+  workspace: windows-v2s2h
+test: ../test/images
+train: ../train/images
+val: ../valid/images

@@ -1,0 +1,45 @@
+name: Backend Python application
+
+on:
+  push:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/python-app.yml'
+  pull_request:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/python-app.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        lfs: true # Ensure Git LFS files are checked out
+    - name: Install Git LFS
+      run: | # Install Git LFS
+        sudo apt-get update
+        sudo apt-get install git-lfs
+        git lfs install
+    - name: Pull Git LFS files
+      run: git lfs pull # Pull LFS files explicitly
+    - name: Debug LFS file status
+      run: |
+        echo "Checking bestRefereeDetection.pt file status:"
+        ls -lh ../models/bestRefereeDetection.pt
+        echo "Listing Git LFS tracked files:"
+        git lfs ls-files
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install flask flask-cors ultralytics torch opencv-python pytest
+    - name: Run tests
+      run: pytest 
