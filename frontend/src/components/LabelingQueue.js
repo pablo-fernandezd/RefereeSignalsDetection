@@ -29,6 +29,76 @@ const LabelingQueue = ({ onBack }) => {
         }, 4000);
     };
 
+    // Keyboard shortcuts handler
+    const handleKeyDown = useCallback((event) => {
+        // Only handle shortcuts when not typing in input fields
+        if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.tagName === 'SELECT') {
+            return;
+        }
+
+        // Prevent default for our shortcuts
+        if (event.key === 'Enter' || event.key.toLowerCase() === 'c' || event.key.toLowerCase() === 'y') {
+            event.preventDefault();
+        }
+
+        if (isProcessing) return; // Don't handle shortcuts while processing
+
+        switch (event.key) {
+            case 'Enter':
+                if (stage === 'auto_referee_confirm') {
+                    handleAutoRefereeConfirm(true);
+                } else if (stage === 'signal_confirm') {
+                    // Trigger confirm with current predicted class
+                    if (signalResult) {
+                        handleSignalConfirm({
+                            predicted_class: signalResult.predicted_class,
+                            confidence: signalResult.confidence,
+                            is_correct: true
+                        });
+                    }
+                }
+                break;
+            case 'c':
+            case 'C':
+                if (stage === 'auto_referee_confirm') {
+                    handleAutoRefereeConfirm(true);
+                } else if (stage === 'signal_confirm') {
+                    if (signalResult) {
+                        handleSignalConfirm({
+                            predicted_class: signalResult.predicted_class,
+                            confidence: signalResult.confidence,
+                            is_correct: true
+                        });
+                    }
+                }
+                break;
+            case 'y':
+            case 'Y':
+                if (stage === 'auto_referee_confirm') {
+                    handleAutoRefereeConfirm(true);
+                } else if (stage === 'signal_confirm') {
+                    if (signalResult) {
+                        handleSignalConfirm({
+                            predicted_class: signalResult.predicted_class,
+                            confidence: signalResult.confidence,
+                            is_correct: true
+                        });
+                    }
+                }
+                break;
+            default:
+                break;
+        }
+    }, [stage, isProcessing, signalResult]);
+
+    // Add keyboard event listeners
+    useEffect(() => {
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [handleKeyDown]);
+
     const fetchPendingFiles = useCallback(async () => {
         setIsLoading(true);
         try {
@@ -116,7 +186,7 @@ const LabelingQueue = ({ onBack }) => {
             const signalRes = await fetch(`${BACKEND_URL}/api/process_signal`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ crop_filename_for_signal: cropResData.crop_filename_for_signal })
+                body: JSON.stringify({ filename: cropResData.crop_filename_for_signal })
             });
             const signalData = await signalRes.json();
             if (!signalRes.ok) throw new Error(signalData.error || 'Failed to process signal.');
@@ -164,7 +234,7 @@ const LabelingQueue = ({ onBack }) => {
                     const signalRes = await fetch(`${BACKEND_URL}/api/process_signal`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ crop_filename_for_signal: confirmData.crop_filename_for_signal }),
+                        body: JSON.stringify({ filename: confirmData.crop_filename_for_signal }),
                     });
                     const signalData = await signalRes.json();
                     if (!signalRes.ok) throw new Error(signalData.error || 'Failed to process signal.');
@@ -180,7 +250,7 @@ const LabelingQueue = ({ onBack }) => {
             const signalRes = await fetch(`${BACKEND_URL}/api/process_signal`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ crop_filename_for_signal: confirmData.crop_filename_for_signal }),
+                body: JSON.stringify({ filename: confirmData.crop_filename_for_signal }),
             });
             const signalData = await signalRes.json();
              if (!signalRes.ok) throw new Error(signalData.error || 'Failed to process signal.');
@@ -265,11 +335,20 @@ const LabelingQueue = ({ onBack }) => {
         <div className="labeling-queue-container">
             <NotificationSystem notifications={notifications} />
             <div className="queue-header">
-                <h2>Labeling Queue</h2>
-                <div className="queue-status">
-                    <span>Image {currentIndex + 1} of {pendingFiles.length}</span>
+                <div className="queue-info">
+                    <h2>Label Pending Frames</h2>
+                    <div className="queue-status">
+                        <span>Image {currentIndex + 1} of {pendingFiles.length}</span>
+                    </div>
+                </div>
+                <div className="queue-actions">
                     <button onClick={onBack} className="back-button">Back to Dashboard</button>
                 </div>
+            </div>
+
+            {/* Keyboard shortcuts help */}
+            <div className="keyboard-shortcuts-help">
+                <span>⌨️ Shortcuts: <kbd>Enter</kbd>/<kbd>C</kbd>/<kbd>Y</kbd> to confirm</span>
             </div>
 
             <div className="labeling-stage">

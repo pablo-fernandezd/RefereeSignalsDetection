@@ -4,11 +4,11 @@ import CropConfirmation from './components/CropConfirmation';
 import ManualCrop from './components/ManualCrop';
 import SignalConfirmation from './components/SignalConfirmation';
 import YouTubeProcessing from './components/YouTubeProcessing';
-import VideoAssetViewer from './components/VideoAssetViewer';
 import AutoLabeledConfirmation from './components/AutoLabeledConfirmation';
 import SignalConfirmationFlow from './components/SignalConfirmationFlow';
 import SignalDetectionConfirmation from './components/SignalDetectionConfirmation';
 import LabelingQueue from './components/LabelingQueue';
+import ModelTraining from './components/ModelTraining';
 import './App.css';
 
 const BACKEND_URL = 'http://localhost:5000';
@@ -369,8 +369,8 @@ function App() {
         
         if (screen === 'dashboard') {
             fetchDashboardData();
-        } else if (screen === 'youtube' || screen === 'assets') {
-            // Trigger video list refresh when navigating to YouTube Processing or Video Assets
+        } else if (screen === 'youtube') {
+            // Trigger video list refresh when navigating to YouTube Processing
             setRefreshTrigger(prev => prev + 1);
         }
         setCurrentView(screen);
@@ -444,12 +444,12 @@ function App() {
                     />
                 );
             }
+            // For other asset types, redirect to YouTube Processing with asset view
             return (
-                <VideoAssetViewer
-                    videoId={viewingAssets.videoId}
-                    assetType={viewingAssets.assetType}
-                    onBack={handleExitAssetView}
-                    onSignalDetected={handleSignalDetection}
+                <YouTubeProcessing 
+                    onViewAssets={handleViewAssets} 
+                    refreshTrigger={refreshTrigger}
+                    initialAssetView={viewingAssets}
                 />
             );
         }
@@ -461,8 +461,8 @@ function App() {
                 return <UploadFlow />;
             case 'youtube':
                 return <YouTubeProcessing onViewAssets={handleViewAssets} refreshTrigger={refreshTrigger} />;
-            case 'assets':
-                return <YouTubeProcessing onViewAssets={handleViewAssets} showOnlyVideoList={true} refreshTrigger={refreshTrigger} />;
+            case 'training':
+                return <ModelTraining />;
             case 'labelingQueue':
                 return <LabelingQueue onBack={() => handleNavigate('dashboard')} />;
             default:
@@ -585,10 +585,10 @@ function App() {
                                 YouTube Processing
                             </button>
                             <button 
-                                className={`nav-button ${currentView === 'assets' ? 'active' : ''}`}
-                                onClick={() => handleNavigate('assets')}
+                                className={`nav-button ${currentView === 'training' ? 'active' : ''}`}
+                                onClick={() => handleNavigate('training')}
                             >
-                                Video Assets
+                                Model Training
                             </button>
                             <button 
                                 className="theme-toggle"

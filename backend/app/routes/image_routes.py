@@ -351,4 +351,279 @@ def process_crop_for_signal():
         })
         
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@image_bp.route('/referee_training_count', methods=['GET'])
+def get_referee_training_count():
+    """Get count of referee training data (positive and negative samples)."""
+    try:
+        # Count files in referee training data directory
+        referee_data_dir = DirectoryConfig.REFEREE_TRAINING_DATA_FOLDER
+        
+        positive_count = 0
+        negative_count = 0
+        
+        if referee_data_dir.exists():
+            # Count image files
+            for ext in ['.png', '.jpg', '.jpeg']:
+                image_files = list(referee_data_dir.glob(f'*{ext}'))
+                
+                # Classify as positive or negative based on filename patterns
+                for img_file in image_files:
+                    name = img_file.name.lower()
+                    if 'negative' in name or 'none' in name or 'no_referee' in name:
+                        negative_count += 1
+                    else:
+                        positive_count += 1
+        
+        return jsonify({
+            'positive_count': positive_count,
+            'negative_count': negative_count,
+            'total_count': positive_count + negative_count
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting referee training count: {e}")
+        return jsonify({
+            'positive_count': 0,
+            'negative_count': 0,
+            'total_count': 0
+        })
+
+@image_bp.route('/signal_classes', methods=['GET'])
+def get_signal_classes():
+    """Get list of signal classes."""
+    try:
+        # Try to load from YAML file first
+        yaml_path = DirectoryConfig.SIGNAL_TRAINING_DATA_FOLDER / 'data.yaml'
+        
+        if yaml_path.exists():
+            import yaml
+            try:
+                with open(yaml_path, 'r') as f:
+                    yaml_data = yaml.safe_load(f)
+                    if 'names' in yaml_data:
+                        classes = yaml_data['names']
+                        # Add 'none' if not present for negative samples
+                        if 'none' not in classes:
+                            classes.append('none')
+                        return jsonify({'classes': classes})
+            except Exception as e:
+                logger.warning(f"Failed to load classes from YAML: {e}")
+        
+        # Fallback to default classes
+        from config.settings import ModelConfig
+        default_classes = ['armLeft', 'armRight', 'hits', 'leftServe', 'net', 'outside', 'rightServe', 'touched', 'none']
+        
+        return jsonify({'classes': default_classes})
+        
+    except Exception as e:
+        logger.error(f"Error getting signal classes: {e}")
+        return jsonify({'classes': ['none']})
+
+@image_bp.route('/signal_class_counts', methods=['GET'])
+def get_signal_class_counts():
+    """Get count of images per signal class."""
+    try:
+        signal_data_dir = DirectoryConfig.SIGNAL_TRAINING_DATA_FOLDER
+        class_counts = {}
+        
+        if signal_data_dir.exists():
+            # Get signal classes
+            signal_classes_response = get_signal_classes()
+            signal_classes = signal_classes_response.get_json().get('classes', [])
+            
+            # Initialize counts
+            for class_name in signal_classes:
+                class_counts[class_name] = 0
+            
+            # Count files by examining label files
+            label_files = list(signal_data_dir.glob('*.txt'))
+            
+            for label_file in label_files:
+                try:
+                    with open(label_file, 'r') as f:
+                        lines = f.readlines()
+                        for line in lines:
+                            parts = line.strip().split()
+                            if parts:
+                                class_id = int(parts[0])
+                                if 0 <= class_id < len(signal_classes):
+                                    class_name = signal_classes[class_id]
+                                    class_counts[class_name] = class_counts.get(class_name, 0) + 1
+                except Exception:
+                    continue
+            
+            # Also count files with class names in filename
+            for ext in ['.png', '.jpg', '.jpeg']:
+                image_files = list(signal_data_dir.glob(f'*{ext}'))
+                for img_file in image_files:
+                    name = img_file.name.lower()
+                    for class_name in signal_classes:
+                        if class_name.lower() in name:
+                            class_counts[class_name] = class_counts.get(class_name, 0) + 1
+                            break
+        
+        return jsonify(class_counts)
+        
+    except Exception as e:
+        logger.error(f"Error getting signal class counts: {e}")
+        return jsonify({})
+
+@image_bp.route('/move_referee_training', methods=['POST'])
+def move_referee_training():
+    """Move referee training data to global training folder."""
+    try:
+        import shutil
+        from pathlib import Path
+        
+        # Source and destination directories
+        src_dir = DirectoryConfig.REFEREE_TRAINING_DATA_FOLDER
+        dst_dir = Path(__file__).parent.parent.parent.parent / 'data' / 'referee_training_data'
+        
+        dst_dir.mkdir(parents=True, exist_ok=True)
+        
+        moved_files = []
+        
+        if src_dir.exists():
+            for file_path in src_dir.iterdir():
+                if file_path.is_file():
+                    dst_path = dst_dir / file_path.name
+                    if not dst_path.exists():  # Avoid overwriting
+                        shutil.move(str(file_path), str(dst_path))
+                        moved_files.append(file_path.name)
+        
+        return jsonify({
+            'status': 'success',
+            'moved': moved_files,
+            'count': len(moved_files),
+            'dst': str(dst_dir)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error moving referee training data: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@image_bp.route('/move_signal_training', methods=['POST'])
+def move_signal_training():
+    """Move signal training data to global training folder."""
+    try:
+        import shutil
+        from pathlib import Path
+        
+        # Source and destination directories
+        src_dir = DirectoryConfig.SIGNAL_TRAINING_DATA_FOLDER
+        dst_dir = Path(__file__).parent.parent.parent.parent / 'data' / 'signal_training_data'
+        
+        dst_dir.mkdir(parents=True, exist_ok=True)
+        
+        moved_files = []
+        
+        if src_dir.exists():
+            for file_path in src_dir.iterdir():
+                if file_path.is_file():
+                    dst_path = dst_dir / file_path.name
+                    if not dst_path.exists():  # Avoid overwriting
+                        shutil.move(str(file_path), str(dst_path))
+                        moved_files.append(file_path.name)
+        
+        return jsonify({
+            'status': 'success',
+            'moved': moved_files,
+            'count': len(moved_files),
+            'dst': str(dst_dir)
+        })
+        
+    except Exception as e:
+        logger.error(f"Error moving signal training data: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@image_bp.route('/delete_referee_training_data', methods=['POST'])
+def delete_referee_training_data():
+    """Delete all referee training data."""
+    try:
+        import shutil
+        
+        referee_data_dir = DirectoryConfig.REFEREE_TRAINING_DATA_FOLDER
+        deleted_count = 0
+        
+        if referee_data_dir.exists():
+            # Count files before deletion
+            all_files = list(referee_data_dir.iterdir())
+            deleted_count = len([f for f in all_files if f.is_file()])
+            
+            # Delete all files in the directory
+            for file_path in all_files:
+                if file_path.is_file():
+                    file_path.unlink()
+        
+        return jsonify({
+            'status': 'success',
+            'deleted_count': deleted_count,
+            'message': f'Deleted {deleted_count} referee training files'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error deleting referee training data: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@image_bp.route('/delete_signal_training_data', methods=['POST'])
+def delete_signal_training_data():
+    """Delete all signal training data."""
+    try:
+        import shutil
+        
+        signal_data_dir = DirectoryConfig.SIGNAL_TRAINING_DATA_FOLDER
+        deleted_count = 0
+        
+        if signal_data_dir.exists():
+            # Count files before deletion
+            all_files = list(signal_data_dir.iterdir())
+            deleted_count = len([f for f in all_files if f.is_file() and not f.name == 'data.yaml'])
+            
+            # Delete all files except data.yaml
+            for file_path in all_files:
+                if file_path.is_file() and file_path.name != 'data.yaml':
+                    file_path.unlink()
+        
+        return jsonify({
+            'status': 'success',
+            'deleted_count': deleted_count,
+            'message': f'Deleted {deleted_count} signal training files'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error deleting signal training data: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@image_bp.route('/process_signal', methods=['POST'])
+def process_signal():
+    """Process a signal detection request from labeling queue."""
+    try:
+        data = request.json
+        filename = data.get('filename')
+        
+        if not filename:
+            return jsonify({'error': 'Filename is required'}), 400
+        
+        # Check if file exists in uploads directory
+        upload_path = DirectoryConfig.UPLOAD_FOLDER / filename
+        if not upload_path.exists():
+            return jsonify({'error': 'Image not found in queue'}), 404
+        
+        # Import and use signal detection
+        from app.models.signal_classifier import detect_signal
+        result = detect_signal(str(upload_path))
+        
+        return jsonify({
+            'status': 'success',
+            'filename': filename,
+            'predicted_class': result.get('predicted_class'),
+            'confidence': result.get('confidence', 0.0),
+            'bbox_xywhn': result.get('bbox_xywhn'),
+            'message': 'Signal detection completed'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in process_signal: {e}")
         return jsonify({'error': str(e)}), 500 
