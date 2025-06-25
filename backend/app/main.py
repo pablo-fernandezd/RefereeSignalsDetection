@@ -26,6 +26,7 @@ try:
     from routes.training_routes import training_bp
     from routes.youtube_routes import youtube_bp
     from routes.queue_routes import queue_bp
+    from routes.model_routes import model_bp
 except ImportError:
     # Try alternative import paths
     sys.path.append(str(Path(__file__).parent))
@@ -39,6 +40,7 @@ except ImportError:
     from routes.training_routes import training_bp
     from routes.youtube_routes import youtube_bp
     from routes.queue_routes import queue_bp
+    from routes.model_routes import model_bp
 
 
 def setup_logging():
@@ -91,6 +93,7 @@ def create_app():
     app.register_blueprint(training_bp, url_prefix='/api')
     app.register_blueprint(youtube_bp, url_prefix='/api/youtube')
     app.register_blueprint(queue_bp, url_prefix='/api/queue')
+    app.register_blueprint(model_bp)
     
     # Register error handlers
     register_error_handlers(app)

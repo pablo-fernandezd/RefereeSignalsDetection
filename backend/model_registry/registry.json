@@ -1,0 +1,94 @@
+{
+  "referee": [
+    {
+      "model_id": "referee_yolov8n_20250625_185543",
+      "model_type": "referee",
+      "version": "v1.0_yolov8n",
+      "created_at": "2025-06-25T18:55:43.444690",
+      "is_active": false,
+      "source": "ultralytics",
+      "file_path": "D:\\RefereeDetection\\backend\\model_registry\\models\\referee_yolov8n_20250625_185543.pt",
+      "file_size_mb": 0,
+      "model_hash": null,
+      "performance_metrics": {},
+      "training_config": {},
+      "ultralytics_info": {},
+      "tags": [
+        "ultralytics",
+        "yolov8n",
+        "referee"
+      ],
+      "description": "Default nano model for referee detection",
+      "download_count": 0,
+      "last_used": null
+    },
+    {
+      "model_id": "referee_yolov8s_20250625_185543",
+      "model_type": "referee",
+      "version": "v1.0_yolov8s",
+      "created_at": "2025-06-25T18:55:43.444690",
+      "is_active": false,
+      "source": "ultralytics",
+      "file_path": "D:\\RefereeDetection\\backend\\model_registry\\models\\referee_yolov8s_20250625_185543.pt",
+      "file_size_mb": 0,
+      "model_hash": null,
+      "performance_metrics": {},
+      "training_config": {},
+      "ultralytics_info": {},
+      "tags": [
+        "ultralytics",
+        "yolov8s",
+        "referee"
+      ],
+      "description": "Default small model for referee detection",
+      "download_count": 0,
+      "last_used": null
+    }
+  ],
+  "signal": [
+    {
+      "model_id": "signal_yolov8n_20250625_185543",
+      "model_type": "signal",
+      "version": "v1.0_yolov8n",
+      "created_at": "2025-06-25T18:55:43.450593",
+      "is_active": false,
+      "source": "ultralytics",
+      "file_path": "D:\\RefereeDetection\\backend\\model_registry\\models\\signal_yolov8n_20250625_185543.pt",
+      "file_size_mb": 0,
+      "model_hash": null,
+      "performance_metrics": {},
+      "training_config": {},
+      "ultralytics_info": {},
+      "tags": [
+        "ultralytics",
+        "yolov8n",
+        "signal"
+      ],
+      "description": "Default nano model for signal detection",
+      "download_count": 0,
+      "last_used": null
+    },
+    {
+      "model_id": "signal_yolov8s_20250625_185543",
+      "model_type": "signal",
+      "version": "v1.0_yolov8s",
+      "created_at": "2025-06-25T18:55:43.451625",
+      "is_active": false,
+      "source": "ultralytics",
+      "file_path": "D:\\RefereeDetection\\backend\\model_registry\\models\\signal_yolov8s_20250625_185543.pt",
+      "file_size_mb": 0,
+      "model_hash": null,
+      "performance_metrics": {},
+      "training_config": {},
+      "ultralytics_info": {},
+      "tags": [
+        "ultralytics",
+        "yolov8s",
+        "signal"
+      ],
+      "description": "Default small model for signal detection",
+      "download_count": 0,
+      "last_used": null
+    }
+  ]
+}

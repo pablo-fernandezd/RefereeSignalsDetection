@@ -32,13 +32,20 @@ try:
         add_padding_to_bbox, convert_bbox_format
     )
     from utils.validation_utils import validate_bbox, validate_signal_class
+    from models.model_registry import get_model_registry
+    MODEL_REGISTRY_AVAILABLE = True
 except ImportError:
-    from app.config.settings import ModelConfig, DirectoryConfig
-    from app.utils.image_utils import (
-        load_image_safely, normalize_image_for_model, 
-        add_padding_to_bbox, convert_bbox_format
-    )
-    from app.utils.validation_utils import validate_bbox, validate_signal_class
+    try:
+        from app.config.settings import ModelConfig, DirectoryConfig
+        from app.utils.image_utils import (
+            load_image_safely, normalize_image_for_model, 
+            add_padding_to_bbox, convert_bbox_format
+        )
+        from app.utils.validation_utils import validate_bbox, validate_signal_class
+        from app.models.model_registry import get_model_registry
+        MODEL_REGISTRY_AVAILABLE = True
+    except ImportError:
+        MODEL_REGISTRY_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +84,7 @@ class ModelManager:
     
     def _load_model(self, model_type: str) -> bool:
         """
-        Load a model from disk.
+        Load a model from disk using model registry or fallback to legacy paths.
         
         Args:
             model_type: Type of model to load ('referee' or 'signal')
@@ -86,13 +93,34 @@ class ModelManager:
             True if model was loaded successfully, False otherwise
         """
         try:
-            if model_type == 'referee':
-                model_path = ModelConfig.REFEREE_MODEL_PATH
-            elif model_type == 'signal':
-                model_path = ModelConfig.SIGNAL_MODEL_PATH
-            else:
-                logger.error(f"Unknown model type: {model_type}")
-                return False
+            model_path = None
+            
+            # Try to get model from registry first
+            if MODEL_REGISTRY_AVAILABLE:
+                try:
+                    registry = get_model_registry()
+                    model_path = registry.get_model_file_path(model_type)
+                    
+                    if model_path and model_path.exists():
+                        logger.info(f"Using active {model_type} model from registry: {model_path}")
+                    else:
+                        logger.warning(f"No active {model_type} model in registry, falling back to legacy paths")
+                        model_path = None
+                except Exception as e:
+                    logger.warning(f"Failed to get model from registry: {e}, falling back to legacy paths")
+                    model_path = None
+            
+            # Fallback to legacy model paths
+            if not model_path:
+                if model_type == 'referee':
+                    model_path = ModelConfig.REFEREE_MODEL_PATH
+                elif model_type == 'signal':
+                    model_path = ModelConfig.SIGNAL_MODEL_PATH
+                else:
+                    logger.error(f"Unknown model type: {model_type}")
+                    return False
+                
+                logger.info(f"Using legacy {model_type} model path: {model_path}")
             
             if not Path(model_path).exists():
                 logger.error(f"Model file not found: {model_path}")
@@ -107,6 +135,20 @@ class ModelManager:
             
             self._models[model_type] = model
             logger.info(f"Successfully loaded {model_type} model")
+            
+            # Update model usage in registry
+            if MODEL_REGISTRY_AVAILABLE:
+                try:
+                    registry = get_model_registry()
+                    active_model = registry.get_active_model(model_type)
+                    if active_model:
+                        from datetime import datetime
+                        registry.update_model_metrics(active_model['model_id'], {
+                            'last_inference': datetime.now().isoformat()
+                        })
+                except Exception as e:
+                    logger.debug(f"Failed to update model usage: {e}")
+            
             return True
             
         except Exception as e:

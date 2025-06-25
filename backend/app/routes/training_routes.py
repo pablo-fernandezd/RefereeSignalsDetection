@@ -387,7 +387,7 @@ def get_training_sessions():
 
 @training_bp.route('/start_training', methods=['POST'])
 def start_training():
-    """Start a new model training session."""
+    """Start a new model training session with real data augmentation."""
     try:
         data = request.get_json()
         
@@ -402,26 +402,72 @@ def start_training():
         if data['model_type'] not in config_manager.get_all_model_types():
             return jsonify({'error': 'Invalid model_type'}), 400
         
-        # Validate augmentation config if provided
-        if 'augmentation_config' in data:
-            data['augmentation_config'] = DataAugmentationManager.validate_augmentation_config(
-                data['augmentation_config']
+        # Validate and process augmentation config if provided
+        augmentation_config = None
+        if 'augmentation_config' in data and data['augmentation_config']:
+            try:
+                # Validate the augmentation configuration
+                augmentation_config = DataAugmentationManager.validate_augmentation_config(
+                    data['augmentation_config']
+                )
+                
+                # Add augmentation factor if not specified
+                if 'augmentation_factor' not in augmentation_config:
+                    augmentation_config['augmentation_factor'] = 2
+                
+                logger.info(f"Augmentation config validated: {len([k for k, v in augmentation_config.items() if v and isinstance(v, bool)])} augmentations enabled")
+                
+            except Exception as e:
+                logger.warning(f"Invalid augmentation config: {e}")
+                augmentation_config = DataAugmentationManager.get_hybrid_config_template()
+        
+        # Prepare dataset with augmentation
+        try:
+            from app.models.training_engine import get_training_engine
+            
+            training_engine = get_training_engine()
+            
+            # Prepare dataset with augmentation
+            dataset_metadata = training_engine.dataset_manager.prepare_dataset(
+                model_type=data['model_type'],
+                train_split=data.get('train_split', 0.7),
+                val_split=data.get('val_split', 0.2),
+                test_split=data.get('test_split', 0.1),
+                augmentation_config=augmentation_config
             )
+            
+            logger.info(f"Dataset prepared with augmentation: {dataset_metadata.get('augmentation_results', {})}")
+            
+        except Exception as e:
+            logger.warning(f"Dataset preparation with augmentation failed: {e}")
+            dataset_metadata = {'error': str(e)}
         
-        # Generate session ID
-        session_id = f"train_{int(time.time())}"
-        
-        # Log training start
-        logger.info(f"Starting training session {session_id} for {data['model_type']} model")
-        
-        # In a real implementation, you would start actual training here
-        # For now, return success with session info
-        return jsonify({
-            'status': 'success',
-            'session_id': session_id,
-            'message': 'Training started successfully',
-            'config': data
-        })
+        # Start training session
+        try:
+            training_config = {
+                'model_type': data['model_type'],
+                'epochs': data['epochs'],
+                'batch_size': data['batch_size'],
+                'learning_rate': data['learning_rate'],
+                'optimizer': data.get('optimizer', 'AdamW'),
+                'augmentation_config': augmentation_config,
+                'dataset_metadata': dataset_metadata
+            }
+            
+            session_id = training_engine.start_training(training_config)
+            
+            return jsonify({
+                'status': 'success',
+                'session_id': session_id,
+                'message': 'Training started successfully with data augmentation',
+                'config': training_config,
+                'dataset_info': dataset_metadata,
+                'augmentation_summary': DataAugmentationManager.create_real_augmentation_engine(augmentation_config).get_augmentation_summary() if augmentation_config else None
+            })
+            
+        except Exception as e:
+            logger.error(f"Failed to start training session: {e}")
+            return jsonify({'error': f'Training start failed: {str(e)}'}), 500
         
     except Exception as e:
         logger.error(f"Failed to start training: {e}")
@@ -641,16 +687,62 @@ def get_available_datasets():
 
 @training_bp.route('/augmentation_options', methods=['GET'])
 def get_augmentation_options():
-    """Get available data augmentation options."""
+    """Get available data augmentation options with categorization."""
     try:
         return jsonify({
             'status': 'success',
             'augmentations': DataAugmentationManager.get_available_augmentations(),
-            'defaults': DataAugmentationManager.get_default_augmentations()
+            'defaults': DataAugmentationManager.get_default_augmentations(),
+            'categories': DataAugmentationManager.get_augmentations_by_category(),
+            'engines': {
+                'albumentations': DataAugmentationManager.get_augmentations_by_engine('albumentations'),
+                'yolo': DataAugmentationManager.get_augmentations_by_engine('yolo')
+            },
+            'hybrid_template': DataAugmentationManager.get_hybrid_config_template()
         })
         
     except Exception as e:
         logger.error(f"Failed to get augmentation options: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@training_bp.route('/test_augmentation', methods=['POST'])
+def test_augmentation():
+    """Test data augmentation configuration on a sample image."""
+    try:
+        data = request.get_json()
+        
+        model_type = data.get('model_type')
+        augmentation_config = data.get('augmentation_config', {})
+        
+        if not model_type:
+            return jsonify({'error': 'Missing model_type'}), 400
+        
+        # Validate augmentation config
+        validated_config = DataAugmentationManager.validate_augmentation_config(augmentation_config)
+        
+        # Create augmentation engine
+        aug_engine = DataAugmentationManager.create_real_augmentation_engine(validated_config)
+        
+        if not aug_engine:
+            return jsonify({'error': 'Failed to create augmentation engine'}), 500
+        
+        # Get augmentation summary
+        summary = aug_engine.get_augmentation_summary()
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Augmentation configuration tested successfully',
+            'config': validated_config,
+            'summary': summary,
+            'enabled_count': len(summary.get('enabled_augmentations', [])),
+            'engines_used': {
+                'albumentations': summary.get('albumentations_enabled', False),
+                'yolo': summary.get('yolo_enabled', False)
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Failed to test augmentation: {e}")
         return jsonify({'error': str(e)}), 500
 
 @training_bp.route('/model_types', methods=['GET'])
