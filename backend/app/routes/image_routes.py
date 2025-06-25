@@ -9,6 +9,7 @@ from flask import Blueprint, request, jsonify, send_from_directory
 from pathlib import Path
 import os
 import logging
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +155,61 @@ def confirm_crop():
         else:
             logger.warning(f"Failed to register hash for image: {original_filename}")
         
-        # Save the crop and create training data
+        # Save the original image to referee training data
+        try:
+            referee_training_dir = DirectoryConfig.REFEREE_TRAINING_DATA_FOLDER
+            referee_training_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Generate filename for positive referee sample
+            base_name = original_path.stem  # filename without extension
+            extension = original_path.suffix  # .jpg, .png, etc.
+            positive_filename = f"referee_positive_{base_name}{extension}"
+            positive_txt_filename = f"referee_positive_{base_name}.txt"
+            
+            positive_path = referee_training_dir / positive_filename
+            positive_label_path = referee_training_dir / positive_txt_filename
+            
+            # Ensure unique filename if it already exists
+            counter = 1
+            while positive_path.exists():
+                positive_filename = f"referee_positive_{base_name}_{counter}{extension}"
+                positive_txt_filename = f"referee_positive_{base_name}_{counter}.txt"
+                positive_path = referee_training_dir / positive_filename
+                positive_label_path = referee_training_dir / positive_txt_filename
+                counter += 1
+            
+            # Move original image to referee training
+            import shutil
+            shutil.move(str(original_path), str(positive_path))
+            
+            # Create non-empty txt file for positive sample (referee detected)
+            # Use normalized bbox coordinates for YOLO format
+            with open(positive_label_path, 'w') as f:
+                # Convert bbox to normalized coordinates
+                # bbox is [x1, y1, x2, y2] in pixels
+                import cv2
+                temp_img = cv2.imread(str(positive_path))
+                if temp_img is not None:
+                    img_height, img_width = temp_img.shape[:2]
+                    x1, y1, x2, y2 = bbox
+                    
+                    # Convert to center_x, center_y, width, height (normalized)
+                    center_x = ((x1 + x2) / 2) / img_width
+                    center_y = ((y1 + y2) / 2) / img_height
+                    width = (x2 - x1) / img_width
+                    height = (y2 - y1) / img_height
+                    
+                    # Class 0 for referee (assuming single class)
+                    f.write(f"0 {center_x:.6f} {center_y:.6f} {width:.6f} {height:.6f}\n")
+                else:
+                    # Fallback if image can't be read
+                    f.write("0 0.5 0.5 1.0 1.0\n")
+            
+            logger.info(f"Saved positive referee sample: {positive_filename} with bbox in {positive_txt_filename}")
+            
+        except Exception as e:
+            logger.warning(f"Failed to save positive referee sample: {e}")
+        
         logger.info(f"Saving referee crop for training: {crop_filename}")
         return jsonify({
             'status': 'ok',
@@ -185,13 +240,56 @@ def manual_crop():
         
         # Handle negative samples (no referee)
         if class_id == -1 or not bbox or len(bbox) == 0:
-            # Save as negative sample - no crop needed
+            # Save as negative sample - move original image to referee training
             logger.info("Saving as negative sample")
-            return jsonify({
-                'status': 'ok',
-                'action': 'saved_as_negative',
-                'message': 'Image saved as negative sample (no referee)'
-            })
+            
+            try:
+                # Get the original image path
+                original_path = DirectoryConfig.UPLOAD_FOLDER / original_filename
+                if not original_path.exists():
+                    return jsonify({'error': f'Original image not found: {original_filename}'}), 404
+                
+                # Generate filename for negative referee sample
+                referee_training_dir = DirectoryConfig.REFEREE_TRAINING_DATA_FOLDER
+                referee_training_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Use original filename but with negative prefix
+                base_name = original_path.stem  # filename without extension
+                extension = original_path.suffix  # .jpg, .png, etc.
+                negative_filename = f"referee_negative_{base_name}{extension}"
+                negative_txt_filename = f"referee_negative_{base_name}.txt"
+                
+                negative_path = referee_training_dir / negative_filename
+                negative_label_path = referee_training_dir / negative_txt_filename
+                
+                # Ensure unique filename if it already exists
+                counter = 1
+                while negative_path.exists():
+                    negative_filename = f"referee_negative_{base_name}_{counter}{extension}"
+                    negative_txt_filename = f"referee_negative_{base_name}_{counter}.txt"
+                    negative_path = referee_training_dir / negative_filename
+                    negative_label_path = referee_training_dir / negative_txt_filename
+                    counter += 1
+                
+                # Move image to referee training
+                import shutil
+                shutil.move(str(original_path), str(negative_path))
+                
+                # Create empty txt file for negative sample (same name as image but .txt)
+                with open(negative_label_path, 'w') as f:
+                    pass  # Empty file
+                
+                logger.info(f"Saved negative referee sample: {negative_filename} with empty {negative_txt_filename}")
+                
+                return jsonify({
+                    'status': 'ok',
+                    'action': 'saved_as_negative',
+                    'message': f'Image saved as negative sample: {negative_filename}'
+                })
+                
+            except Exception as e:
+                logger.error(f"Failed to save negative referee sample: {e}")
+                return jsonify({'error': f'Failed to save negative sample: {str(e)}'}), 500
         
         if not bbox or len(bbox) != 4:
             return jsonify({'error': 'Invalid bbox parameter - must be [x1, y1, x2, y2]'}), 400
@@ -262,6 +360,79 @@ def manual_crop():
         
         logger.info(f"Successfully created manual crop: {crop_filename}")
         
+        # Save the original image to referee training data with YOLO annotation
+        try:
+            # Check if the original image has been processed before
+            from app.utils.hash_utils import is_duplicate_image, register_image_hash, clear_hash_cache
+            
+            # Clear cache to ensure fresh data
+            clear_hash_cache()
+            
+            # Check for duplicate
+            if is_duplicate_image(original_path):
+                logger.info(f"Duplicate image detected: {original_filename}")
+                # Still return success but note it's a duplicate
+                return jsonify({
+                    'status': 'warning',
+                    'action': 'duplicate_detected',
+                    'message': 'This image has been processed before. It will not be saved to training data to avoid duplicates.',
+                    'crop_filename_for_signal': crop_filename,
+                    'duplicate': True
+                })
+            
+            # Register the image hash to prevent future duplicates
+            if register_image_hash(original_path):
+                logger.info(f"Registered hash for image: {original_filename}")
+            else:
+                logger.warning(f"Failed to register hash for image: {original_filename}")
+            
+            # Generate filename for positive referee sample
+            referee_training_dir = DirectoryConfig.REFEREE_TRAINING_DATA_FOLDER
+            referee_training_dir.mkdir(parents=True, exist_ok=True)
+            
+            base_name = original_path.stem  # filename without extension
+            extension = original_path.suffix  # .jpg, .png, etc.
+            positive_filename = f"referee_confirmed_{int(datetime.now().timestamp() * 1000)}{extension}"
+            positive_txt_filename = f"referee_confirmed_{int(datetime.now().timestamp() * 1000)}.txt"
+            
+            positive_path = referee_training_dir / positive_filename
+            positive_label_path = referee_training_dir / positive_txt_filename
+            
+            # Ensure unique filename if it already exists
+            counter = 1
+            while positive_path.exists():
+                timestamp_ms = int(datetime.now().timestamp() * 1000)
+                positive_filename = f"referee_confirmed_{timestamp_ms}_{counter}{extension}"
+                positive_txt_filename = f"referee_confirmed_{timestamp_ms}_{counter}.txt"
+                positive_path = referee_training_dir / positive_filename
+                positive_label_path = referee_training_dir / positive_txt_filename
+                counter += 1
+            
+            # Move original image to referee training
+            import shutil
+            shutil.move(str(original_path), str(positive_path))
+            
+            # Create YOLO annotation file for positive sample (referee detected)
+            with open(positive_label_path, 'w') as f:
+                # Convert bbox to normalized coordinates for YOLO format
+                # bbox is [x1, y1, x2, y2] in pixels
+                img_height, img_width = image.shape[:2]
+                
+                # Convert to center_x, center_y, width, height (normalized)
+                center_x = ((x1 + x2) / 2) / img_width
+                center_y = ((y1 + y2) / 2) / img_height
+                width = (x2 - x1) / img_width
+                height = (y2 - y1) / img_height
+                
+                # Class 0 for referee (assuming single class)
+                f.write(f"0 {center_x:.6f} {center_y:.6f} {width:.6f} {height:.6f}\n")
+            
+            logger.info(f"Moved original image to referee training: {positive_filename}")
+            logger.info(f"Created YOLO annotation file: {positive_txt_filename}")
+            
+        except Exception as e:
+            logger.warning(f"Failed to save positive referee sample: {e}")
+        
         # Determine response based on workflow
         if proceed_to_signal:
             return jsonify({
@@ -307,6 +478,43 @@ def process_queued_image_referee():
                 'bbox': result['bbox']
             })
         else:
+            # No referee detected - save as negative sample to referee training
+            try:
+                # Generate filename for negative referee sample using original filename
+                referee_training_dir = DirectoryConfig.REFEREE_TRAINING_DATA_FOLDER
+                referee_training_dir.mkdir(parents=True, exist_ok=True)
+                
+                # Use original filename but with negative prefix
+                base_name = upload_path.stem  # filename without extension
+                extension = upload_path.suffix  # .jpg, .png, etc.
+                negative_filename = f"referee_negative_{base_name}{extension}"
+                negative_txt_filename = f"referee_negative_{base_name}.txt"
+                
+                negative_path = referee_training_dir / negative_filename
+                negative_label_path = referee_training_dir / negative_txt_filename
+                
+                # Ensure unique filename if it already exists
+                counter = 1
+                while negative_path.exists():
+                    negative_filename = f"referee_negative_{base_name}_{counter}{extension}"
+                    negative_txt_filename = f"referee_negative_{base_name}_{counter}.txt"
+                    negative_path = referee_training_dir / negative_filename
+                    negative_label_path = referee_training_dir / negative_txt_filename
+                    counter += 1
+                
+                # Move image to referee training
+                import shutil
+                shutil.move(str(upload_path), str(negative_path))
+                
+                # Create empty txt file for negative sample (same name as image but .txt)
+                with open(negative_label_path, 'w') as f:
+                    pass  # Empty file
+                
+                logger.info(f"Saved negative referee sample: {negative_filename} with empty {negative_txt_filename}")
+                
+            except Exception as e:
+                logger.warning(f"Failed to save negative referee sample: {e}")
+            
             return jsonify({
                 'error': 'No referee detected',
                 'filename': filename,
@@ -355,26 +563,33 @@ def process_crop_for_signal():
 
 @image_bp.route('/referee_training_count', methods=['GET'])
 def get_referee_training_count():
-    """Get count of referee training data (positive and negative samples)."""
+    """Get count of referee training data by counting txt files only."""
     try:
-        # Count files in referee training data directory
+        # Count txt files in referee training data directory
         referee_data_dir = DirectoryConfig.REFEREE_TRAINING_DATA_FOLDER
         
         positive_count = 0
         negative_count = 0
         
         if referee_data_dir.exists():
-            # Count image files
-            for ext in ['.png', '.jpg', '.jpeg']:
-                image_files = list(referee_data_dir.glob(f'*{ext}'))
-                
-                # Classify as positive or negative based on filename patterns
-                for img_file in image_files:
-                    name = img_file.name.lower()
-                    if 'negative' in name or 'none' in name or 'no_referee' in name:
+            # Count txt files only
+            txt_files = list(referee_data_dir.glob('*.txt'))
+            
+            for txt_file in txt_files:
+                try:
+                    with open(txt_file, 'r') as f:
+                        content = f.read().strip()
+                    
+                    if not content:
+                        # Empty txt file = negative sample (no referee)
                         negative_count += 1
                     else:
+                        # Non-empty txt file = positive sample (referee detected)
                         positive_count += 1
+                        
+                except Exception as e:
+                    logger.warning(f"Error reading {txt_file}: {e}")
+                    continue
         
         return jsonify({
             'positive_count': positive_count,
@@ -423,7 +638,7 @@ def get_signal_classes():
 
 @image_bp.route('/signal_class_counts', methods=['GET'])
 def get_signal_class_counts():
-    """Get count of images per signal class."""
+    """Get count of images per signal class by counting txt files only."""
     try:
         signal_data_dir = DirectoryConfig.SIGNAL_TRAINING_DATA_FOLDER
         class_counts = {}
@@ -437,32 +652,34 @@ def get_signal_class_counts():
             for class_name in signal_classes:
                 class_counts[class_name] = 0
             
-            # Count files by examining label files
+            # Count ONLY txt files
             label_files = list(signal_data_dir.glob('*.txt'))
             
             for label_file in label_files:
+                # Skip data.yaml related files
+                if label_file.name == 'data.yaml':
+                    continue
+                    
                 try:
                     with open(label_file, 'r') as f:
-                        lines = f.readlines()
+                        content = f.read().strip()
+                        
+                    if not content:
+                        # Empty txt file = negative sample (none/no signal)
+                        class_counts['none'] = class_counts.get('none', 0) + 1
+                    else:
+                        # Parse the content for class ID
+                        lines = content.split('\n')
                         for line in lines:
                             parts = line.strip().split()
                             if parts:
                                 class_id = int(parts[0])
-                                if 0 <= class_id < len(signal_classes):
+                                if 0 <= class_id < len(signal_classes) - 1:  # Exclude 'none' from regular classes
                                     class_name = signal_classes[class_id]
                                     class_counts[class_name] = class_counts.get(class_name, 0) + 1
-                except Exception:
+                except Exception as e:
+                    logger.warning(f"Error reading {label_file}: {e}")
                     continue
-            
-            # Also count files with class names in filename
-            for ext in ['.png', '.jpg', '.jpeg']:
-                image_files = list(signal_data_dir.glob(f'*{ext}'))
-                for img_file in image_files:
-                    name = img_file.name.lower()
-                    for class_name in signal_classes:
-                        if class_name.lower() in name:
-                            class_counts[class_name] = class_counts.get(class_name, 0) + 1
-                            break
         
         return jsonify(class_counts)
         
@@ -540,7 +757,7 @@ def move_signal_training():
 
 @image_bp.route('/delete_referee_training_data', methods=['POST'])
 def delete_referee_training_data():
-    """Delete all referee training data."""
+    """Delete all referee training data except yaml files."""
     try:
         import shutil
         
@@ -548,19 +765,19 @@ def delete_referee_training_data():
         deleted_count = 0
         
         if referee_data_dir.exists():
-            # Count files before deletion
+            # Count files before deletion (excluding yaml files)
             all_files = list(referee_data_dir.iterdir())
-            deleted_count = len([f for f in all_files if f.is_file()])
+            deleted_count = len([f for f in all_files if f.is_file() and not f.name.endswith('.yaml')])
             
-            # Delete all files in the directory
+            # Delete all files except yaml files
             for file_path in all_files:
-                if file_path.is_file():
+                if file_path.is_file() and not file_path.name.endswith('.yaml'):
                     file_path.unlink()
         
         return jsonify({
             'status': 'success',
             'deleted_count': deleted_count,
-            'message': f'Deleted {deleted_count} referee training files'
+            'message': f'Deleted {deleted_count} referee training files (kept yaml files)'
         })
         
     except Exception as e:
@@ -606,14 +823,19 @@ def process_signal():
         if not filename:
             return jsonify({'error': 'Filename is required'}), 400
         
-        # Check if file exists in uploads directory
-        upload_path = DirectoryConfig.UPLOAD_FOLDER / filename
-        if not upload_path.exists():
-            return jsonify({'error': 'Image not found in queue'}), 404
+        # Check if file exists in crops directory (where manual crops are saved)
+        crop_path = DirectoryConfig.CROPS_FOLDER / filename
+        if not crop_path.exists():
+            # Also check uploads directory as fallback
+            upload_path = DirectoryConfig.UPLOAD_FOLDER / filename
+            if upload_path.exists():
+                crop_path = upload_path
+            else:
+                return jsonify({'error': f'Image not found: {filename}'}), 404
         
         # Import and use signal detection
         from app.models.signal_classifier import detect_signal
-        result = detect_signal(str(upload_path))
+        result = detect_signal(str(crop_path))
         
         return jsonify({
             'status': 'success',
@@ -626,4 +848,107 @@ def process_signal():
         
     except Exception as e:
         logger.error(f"Error in process_signal: {e}")
+        return jsonify({'error': str(e)}), 500
+
+@image_bp.route('/confirm_signal', methods=['POST'])
+def confirm_signal():
+    """Confirm signal classification and save to training data."""
+    try:
+        data = request.json
+        original_filename = data.get('original_filename')
+        crop_filename_for_signal = data.get('crop_filename_for_signal')
+        selected_class = data.get('selected_class')
+        confidence = data.get('confidence', 0.0)
+        
+        # Validate required parameters
+        if not all([original_filename, crop_filename_for_signal, selected_class]):
+            return jsonify({'error': 'Missing required parameters: original_filename, crop_filename_for_signal, and selected_class are required'}), 400
+        
+        # Check if crop file exists
+        crop_path = DirectoryConfig.CROPS_FOLDER / crop_filename_for_signal
+        if not crop_path.exists():
+            # Also check uploads directory as fallback
+            upload_path = DirectoryConfig.UPLOAD_FOLDER / crop_filename_for_signal
+            if upload_path.exists():
+                crop_path = upload_path
+            else:
+                return jsonify({'error': f'Crop file not found: {crop_filename_for_signal}'}), 404
+        
+        # Always save to signal training data with the selected class
+        try:
+            # Import hash utilities
+            from app.utils.hash_utils import calculate_image_hash, is_hash_registered
+            import time
+            
+            # Calculate hash to check for duplicates
+            image_hash = calculate_image_hash(str(crop_path))
+            
+            if is_hash_registered(image_hash):
+                return jsonify({
+                    'status': 'warning',
+                    'action': 'duplicate_detected',
+                    'message': f'This image appears to be a duplicate and has not been saved for training.'
+                })
+            
+            # Generate unique filename for training data
+            timestamp = int(time.time() * 1000000)
+            training_filename = f"signal_{selected_class}_{timestamp}"
+            
+            # Copy image to training folder
+            signal_training_dir = DirectoryConfig.SIGNAL_TRAINING_DATA_FOLDER
+            signal_training_dir.mkdir(parents=True, exist_ok=True)
+            
+            training_image_path = signal_training_dir / f"{training_filename}.jpg"
+            training_label_path = signal_training_dir / f"{training_filename}.txt"
+            
+            # Copy the image
+            import shutil
+            shutil.copy2(str(crop_path), str(training_image_path))
+            
+            # Create YOLO format label
+            with open(training_label_path, 'w') as f:
+                if selected_class == 'none':
+                    # Empty file for negative samples (no signal)
+                    pass  # Write nothing - empty file
+                else:
+                    # Get class ID from signal classes (excluding 'none')
+                    signal_classes_response = get_signal_classes()
+                    signal_classes = signal_classes_response.get_json().get('classes', [])
+                    signal_classes_without_none = [cls for cls in signal_classes if cls != 'none']
+                    
+                    try:
+                        class_id = signal_classes_without_none.index(selected_class)
+                        # Full image bounding box (normalized coordinates)
+                        f.write(f"{class_id} 0.5 0.5 1.0 1.0\n")
+                    except ValueError:
+                        # If class not found, leave empty (negative sample)
+                        pass
+            
+            # Add hash to hash file  
+            hash_file = DirectoryConfig.IMAGE_HASH_REGISTRY
+            hash_file.parent.mkdir(parents=True, exist_ok=True)
+            with open(hash_file, 'a') as f:
+                f.write(f"{image_hash}\n")
+            
+            # Clean up the original crop file
+            crop_path.unlink()
+            
+            # Note: Original image should already be moved to referee training by manual_crop endpoint
+            # No need to move it again here
+            logger.info(f"Signal training data saved. Original image should already be in referee training data.")
+            
+            return jsonify({
+                'status': 'success',
+                'message': f'Signal "{selected_class}" saved to training data. Original image moved to referee training.',
+                'training_file': training_filename,
+                'confidence': confidence
+            })
+            
+        except Exception as e:
+            logger.error(f"Error saving signal training data: {e}")
+            return jsonify({'error': f'Failed to save training data: {str(e)}'}), 500
+
+        
+    except Exception as e:
+        logger.error(f"Error in confirm_signal: {e}")
         return jsonify({'error': str(e)}), 500 

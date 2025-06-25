@@ -29,75 +29,7 @@ const LabelingQueue = ({ onBack }) => {
         }, 4000);
     };
 
-    // Keyboard shortcuts handler
-    const handleKeyDown = useCallback((event) => {
-        // Only handle shortcuts when not typing in input fields
-        if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.tagName === 'SELECT') {
-            return;
-        }
-
-        // Prevent default for our shortcuts
-        if (event.key === 'Enter' || event.key.toLowerCase() === 'c' || event.key.toLowerCase() === 'y') {
-            event.preventDefault();
-        }
-
-        if (isProcessing) return; // Don't handle shortcuts while processing
-
-        switch (event.key) {
-            case 'Enter':
-                if (stage === 'auto_referee_confirm') {
-                    handleAutoRefereeConfirm(true);
-                } else if (stage === 'signal_confirm') {
-                    // Trigger confirm with current predicted class
-                    if (signalResult) {
-                        handleSignalConfirm({
-                            predicted_class: signalResult.predicted_class,
-                            confidence: signalResult.confidence,
-                            is_correct: true
-                        });
-                    }
-                }
-                break;
-            case 'c':
-            case 'C':
-                if (stage === 'auto_referee_confirm') {
-                    handleAutoRefereeConfirm(true);
-                } else if (stage === 'signal_confirm') {
-                    if (signalResult) {
-                        handleSignalConfirm({
-                            predicted_class: signalResult.predicted_class,
-                            confidence: signalResult.confidence,
-                            is_correct: true
-                        });
-                    }
-                }
-                break;
-            case 'y':
-            case 'Y':
-                if (stage === 'auto_referee_confirm') {
-                    handleAutoRefereeConfirm(true);
-                } else if (stage === 'signal_confirm') {
-                    if (signalResult) {
-                        handleSignalConfirm({
-                            predicted_class: signalResult.predicted_class,
-                            confidence: signalResult.confidence,
-                            is_correct: true
-                        });
-                    }
-                }
-                break;
-            default:
-                break;
-        }
-    }, [stage, isProcessing, signalResult]);
-
-    // Add keyboard event listeners
-    useEffect(() => {
-        document.addEventListener('keydown', handleKeyDown);
-        return () => {
-            document.removeEventListener('keydown', handleKeyDown);
-        };
-    }, [handleKeyDown]);
+    // We'll define the keyboard handler after the function definitions
 
     const fetchPendingFiles = useCallback(async () => {
         setIsLoading(true);
@@ -166,36 +98,74 @@ const LabelingQueue = ({ onBack }) => {
     const handleManualCropSubmit = async (data) => {
         setIsProcessing(true);
         const currentFile = pendingFiles[currentIndex];
+        
         try {
+            // Validate input data
+            if (!data) {
+                throw new Error('No crop data provided');
+            }
+            
+            if (!currentFile) {
+                throw new Error('No current file selected');
+            }
+
             // 1. Submit manual crop
+            const cropPayload = { 
+                ...data, 
+                original_filename: currentFile 
+            };
+            
             const cropRes = await fetch(`${BACKEND_URL}/api/manual_crop`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...data, original_filename: currentFile })
+                body: JSON.stringify(cropPayload)
             });
+            
+            if (!cropRes.ok) {
+                const errorData = await cropRes.json();
+                throw new Error(errorData.error || `HTTP ${cropRes.status}: Failed to save manual crop`);
+            }
+            
             const cropResData = await cropRes.json();
-            if (!cropRes.ok) throw new Error(cropResData.error || 'Failed to save manual crop.');
 
             // If the image was saved as a negative, just move to the next image.
             if (cropResData.action === 'saved_as_negative') {
+                addNotification('Image saved as negative sample (no referee)', 'info');
                 handleNextImage();
-                return; // Stop processing for this image
+                return;
+            }
+
+            // Check if we should proceed to signal detection
+            if (data.proceedToSignal === false) {
+                addNotification('Crop saved to training data', 'success');
+                handleNextImage();
+                return;
             }
 
             // 2. Process the new crop for a signal
+            if (!cropResData.crop_filename_for_signal) {
+                throw new Error('No crop filename returned from manual_crop. Response: ' + JSON.stringify(cropResData));
+            }
+            
             const signalRes = await fetch(`${BACKEND_URL}/api/process_signal`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ filename: cropResData.crop_filename_for_signal })
             });
+            
+            if (!signalRes.ok) {
+                const errorData = await signalRes.json();
+                throw new Error(errorData.error || `HTTP ${signalRes.status}: Failed to process signal`);
+            }
+            
             const signalData = await signalRes.json();
-            if (!signalRes.ok) throw new Error(signalData.error || 'Failed to process signal.');
 
             setCropData(cropResData);
             setSignalResult(signalData);
             setStage('signal_confirm');
 
         } catch (err) {
+            console.error('Error in handleManualCropSubmit:', err);
             addNotification(`Error: ${err.message}`, 'error');
         } finally {
             setIsProcessing(false);
@@ -268,29 +238,52 @@ const LabelingQueue = ({ onBack }) => {
 
     const handleSignalConfirm = async (data) => {
         setIsProcessing(true);
-         try {
+        
+        try {
+            // Validate required data
+            if (!data) {
+                throw new Error('No signal confirmation data provided');
+            }
+            
+            if (!pendingFiles[currentIndex]) {
+                throw new Error('No current file selected');
+            }
+            
+            if (!cropData?.crop_filename_for_signal) {
+                throw new Error('No crop filename available for signal confirmation');
+            }
+
+            const payload = {
+                selected_class: data.selected_class || 'none',
+                confidence: data.confidence || 0.0,
+                original_filename: pendingFiles[currentIndex],
+                crop_filename_for_signal: cropData.crop_filename_for_signal,
+            };
+
             const response = await fetch(`${BACKEND_URL}/api/confirm_signal`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ...data,
-                    original_filename: pendingFiles[currentIndex],
-                    crop_filename_for_signal: cropData.crop_filename_for_signal,
-                })
+                body: JSON.stringify(payload)
             });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `HTTP ${response.status}: Failed to confirm signal`);
+            }
+            
             const resData = await response.json();
-            if (!response.ok) throw new Error(resData.error || 'Failed to confirm signal.');
 
             // Check for duplicate detection
             if (resData.status === 'warning' && resData.action === 'duplicate_detected') {
                 addNotification(`⚠️ Duplicate Image Detected\n\n${resData.message}\n\nThank you for your labeling, but the data has not been saved for training.`, 'warning');
             } else {
-            addNotification(resData.message || 'Signal confirmed!', 'success');
+                addNotification(resData.message || 'Signal confirmed!', 'success');
             }
             
             handleNextImage();
 
         } catch (err) {
+            console.error('Error in handleSignalConfirm:', err);
             addNotification(`Error: ${err.message}`, 'error');
         } finally {
             setIsProcessing(false);
@@ -325,6 +318,46 @@ const LabelingQueue = ({ onBack }) => {
         handleNextImage();
     };
 
+    // Keyboard shortcuts handler - defined after all functions to avoid temporal dead zone
+    const handleKeyDown = useCallback((event) => {
+        // Only handle shortcuts when not typing in input fields
+        if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.tagName === 'SELECT') {
+            return;
+        }
+
+        if (isProcessing) return; // Don't handle shortcuts while processing
+
+        // Handle shortcuts for manual_referee stage (top-level buttons only)
+        if (stage === 'manual_referee') {
+            if (event.key.toLowerCase() === 'd') {
+                // D for Discard Image
+                event.preventDefault();
+                event.stopPropagation();
+                handleDeleteImage();
+            } else if (event.key.toLowerCase() === 'a') {
+                // A for Auto-Detect Referee
+                event.preventDefault();
+                event.stopPropagation();
+                handleAutoDetectReferee();
+            }
+            // Let ManualCrop component handle other shortcuts (Enter, Space, N, 1, 2)
+            // Don't prevent default for other keys - let ManualCrop handle them
+            return;
+        }
+        
+        // For auto_referee_confirm and signal_confirm stages, 
+        // let child components (CropConfirmation, SignalConfirmation) handle ALL shortcuts
+        // Don't handle any shortcuts here to prevent conflicts
+    }, [stage, isProcessing, handleDeleteImage, handleAutoDetectReferee]);
+
+    // Add keyboard event listeners
+    useEffect(() => {
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [handleKeyDown]);
+
     const currentFile = pendingFiles.length > 0 ? pendingFiles[currentIndex] : null;
 
     if (isLoading) return <div className="loading-queue">Loading pending images...</div>;
@@ -346,9 +379,17 @@ const LabelingQueue = ({ onBack }) => {
                 </div>
             </div>
 
-            {/* Keyboard shortcuts help */}
+            {/* Keyboard shortcuts help - conditional based on stage */}
             <div className="keyboard-shortcuts-help">
-                <span>⌨️ Shortcuts: <kbd>Enter</kbd>/<kbd>C</kbd>/<kbd>Y</kbd> to confirm</span>
+                {stage === 'manual_referee' && (
+                    <span>⌨️ Shortcuts: <kbd>D</kbd> Discard | <kbd>A</kbd> Auto-Detect | <kbd>Enter</kbd> Save & Label | <kbd>Space</kbd> Skip | <kbd>N</kbd> No Referee</span>
+                )}
+                {stage === 'auto_referee_confirm' && (
+                    <span>⌨️ Shortcuts: <kbd>Y</kbd> Yes | <kbd>N</kbd> No</span>
+                )}
+                {stage === 'signal_confirm' && (
+                    <span>⌨️ Shortcuts: <kbd>Enter</kbd> Submit | <kbd>C</kbd> Correct | <kbd>Y</kbd> Accept Prediction</span>
+                )}
             </div>
 
             <div className="labeling-stage">
@@ -356,10 +397,10 @@ const LabelingQueue = ({ onBack }) => {
                     <div className="manual-referee-stage">
                          <div className="autolabel-controls">
                              <button onClick={handleDeleteImage} disabled={isProcessing} className="delete-btn">
-                                 Discard Image
+                                 <kbd>D</kbd> Discard Image
                              </button>
                              <button onClick={handleAutoDetectReferee} disabled={isProcessing} className="autodetect-btn">
-                                 {isProcessing ? 'Processing...' : 'Auto-detect Referee'}
+                                 <kbd>A</kbd> {isProcessing ? 'Processing...' : 'Auto-detect Referee'}
                              </button>
                          </div>
                         <ManualCrop
@@ -387,7 +428,12 @@ const LabelingQueue = ({ onBack }) => {
                         signalBbox={signalResult.bbox_xywhn}
                         cropFilenameForSignal={cropData.crop_filename_for_signal}
                         onConfirm={handleSignalConfirm}
-                        onCancel={() => setStage('manual_referee')}
+                        onCancel={() => {
+                            // When going back from signal detection, skip to next image
+                            // because the original image has already been processed and moved to training data
+                            addNotification("Crop already saved to training data. Moving to next image.", 'info');
+                            handleNextImage();
+                        }}
                         originalFilename={currentFile}
                     />
                 )}

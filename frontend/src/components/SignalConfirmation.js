@@ -8,26 +8,43 @@ const SIGNAL_CLASSES = [
 const SignalConfirmation = ({ predictedClass, confidence, signalBbox, cropFilenameForSignal, onConfirm, onCancel, originalFilename, imageUrl, onDiscard }) => {
   const [isCorrect, setIsCorrect] = useState(true);
   const [selectedClass, setSelectedClass] = useState(predictedClass || 'none');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Add keyboard shortcuts for faster navigation
   useEffect(() => {
     const handleKeyPress = (e) => {
+      // Don't process keyboard shortcuts if already submitting
+      if (isSubmitting) return;
+      
+      // Don't process if user is typing in an input field
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') {
+        return;
+      }
+      
       if (e.key === 'y' || e.key === 'Y') {
-        // 'Y' for Yes/Correct - auto submit
+        // 'Y' for Yes/Correct - accept prediction and submit immediately
         e.preventDefault();
-        setIsCorrect(true);
-        // Auto-submit when marking as correct
-        setTimeout(() => {
-          handleSubmit(true);
-        }, 100);
+        e.stopPropagation();
+        if (!isSubmitting) {
+          setIsCorrect(true);
+          // Small delay to ensure state is updated, then submit
+          setTimeout(() => {
+            handleSubmit();
+          }, 50);
+        }
       } else if (e.key === 'n' || e.key === 'N') {
-        // 'N' for No/Incorrect
+        // 'N' for No/Incorrect - just set state
         e.preventDefault();
-        setIsCorrect(false);
+        if (!isSubmitting) {
+          setIsCorrect(false);
+        }
       } else if (e.key === 'Enter') {
-        // Enter to submit
+        // Enter to submit - prevent default to avoid double submission
         e.preventDefault();
-        handleSubmit();
+        e.stopPropagation();
+        if (!isSubmitting) {
+          handleSubmit();
+        }
       } else if (e.key === 'd' || e.key === 'D') {
         // 'D' for Discard
         e.preventDefault();
@@ -45,35 +62,34 @@ const SignalConfirmation = ({ predictedClass, confidence, signalBbox, cropFilena
 
     document.addEventListener('keydown', handleKeyPress);
     return () => document.removeEventListener('keydown', handleKeyPress);
-  }, []);
+  }, [isSubmitting]);
 
-  const handleSubmit = (forceCorrect = false) => {
-    // Determine the final selected class
-    let finalSelectedClass;
-    const finalIsCorrect = forceCorrect || isCorrect;
-    
-    if (finalIsCorrect) {
-      // If user says prediction is correct, use the predicted class or default to 'none'
-      finalSelectedClass = predictedClass || 'none';
-    } else {
-      // If user says prediction is incorrect, use their manually selected class
-      finalSelectedClass = selectedClass;
+  const handleSubmit = () => {
+    // Prevent duplicate submissions
+    if (isSubmitting) {
+      return;
     }
+    
+    setIsSubmitting(true);
+    
+    // Simple logic: just send the selected class
+    const finalSelectedClass = isCorrect ? (predictedClass || 'none') : selectedClass;
 
     onConfirm({
-      correct: finalIsCorrect,
       selected_class: finalSelectedClass,
-      signal_bbox_yolo: signalBbox,
-      original_filename: originalFilename
+      confidence: confidence || 0.0,
+      signal_bbox_yolo: signalBbox
     });
+    
+    // Reset submitting state after a delay
+    setTimeout(() => {
+      setIsSubmitting(false);
+    }, 500);
   };
 
   const handleCorrectClick = () => {
     setIsCorrect(true);
-    // Auto-submit when clicking correct
-    setTimeout(() => {
-      handleSubmit(true);
-    }, 100);
+    // Don't auto-submit when clicking - let user press Enter or Y key
   };
 
   const handleBackToCrop = () => {
@@ -93,7 +109,7 @@ const SignalConfirmation = ({ predictedClass, confidence, signalBbox, cropFilena
     <div className="signal-confirmation-container">
       <h3>Hand Signal Labeling</h3>
       <div className="keyboard-shortcuts">
-        <span>Shortcuts: <kbd>Y</kbd> Correct | <kbd>N</kbd> Incorrect | <kbd>D</kbd> Discard | <kbd>1-9</kbd> Quick class selection | <kbd>Enter</kbd> Submit</span>
+        <span>Shortcuts: <kbd>Y</kbd> Accept & Submit | <kbd>N</kbd> Choose Class | <kbd>Enter</kbd> Submit | <kbd>D</kbd> Discard | <kbd>1-9</kbd> Quick class selection</span>
       </div>
       {refereeCropImageUrl && (
         <div className="referee-crop-display">
@@ -110,59 +126,61 @@ const SignalConfirmation = ({ predictedClass, confidence, signalBbox, cropFilena
       </div>
 
       <div className="signal-feedback-section">
-        <h4>Is this prediction correct?</h4>
+        <h4>Accept AI prediction or choose correct class:</h4>
         <div className="signal-feedback-options">
-          <label className="feedback-option">
+          <label className="feedback-option" onClick={() => !isSubmitting && handleCorrectClick()}>
             <input
               type="radio"
               checked={isCorrect}
-              onChange={handleCorrectClick}
+              onChange={() => {}} // Prevent onChange from triggering
+              disabled={isSubmitting}
             />
-            <span><kbd>Y</kbd> ✓ Correct</span>
+            <span><kbd>Y</kbd> ✓ Accept "{predictedClass || 'none'}"</span>
           </label>
-          <label className="feedback-option">
+          <label className="feedback-option" onClick={() => !isSubmitting && setIsCorrect(false)}>
             <input
               type="radio"
               checked={!isCorrect}
-              onChange={() => setIsCorrect(false)}
+              onChange={() => {}} // Prevent onChange from triggering
+              disabled={isSubmitting}
             />
-            <span><kbd>N</kbd> ✗ Incorrect</span>
+            <span><kbd>N</kbd> ✗ Choose different class</span>
           </label>
         </div>
       </div>
 
-      <div className="signal-correct-class-selection">
-        <h4>{isCorrect ? 'Confirmed signal:' : 'Select the correct signal:'}</h4>
-        <select 
-          value={isCorrect ? (predictedClass || 'none') : selectedClass} 
-          onChange={e => setSelectedClass(e.target.value)} 
-          className="class-select"
-          disabled={isCorrect}
-        >
-          {SIGNAL_CLASSES.map((cls, index) => (
-            <option key={cls} value={cls}>
-              {index + 1}. {cls === 'none' ? 'No Signal (Negative Sample)' : cls.charAt(0).toUpperCase() + cls.slice(1)}
-            </option>
-          ))}
-        </select>
-        {!isCorrect && (
+      {!isCorrect && (
+        <div className="signal-correct-class-selection">
+          <h4>Select the correct signal:</h4>
+          <select 
+            value={selectedClass} 
+            onChange={(e) => setSelectedClass(e.target.value)} 
+            className="class-select"
+            disabled={isSubmitting}
+          >
+            {SIGNAL_CLASSES.map((cls, index) => (
+              <option key={cls} value={cls}>
+                {index + 1}. {cls === 'none' ? 'No Signal (Negative Sample)' : cls.charAt(0).toUpperCase() + cls.slice(1)}
+              </option>
+            ))}
+          </select>
           <div className="class-shortcuts">
             <span>Use number keys <kbd>1</kbd>-<kbd>9</kbd> for quick selection</span>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       <div className="action-buttons">
-        <button onClick={handleSubmit} className="submit-button">
-          <kbd>Enter</kbd> Save Signal Label
+        <button onClick={() => handleSubmit()} className="submit-button" disabled={isSubmitting}>
+          <kbd>Enter</kbd> {isSubmitting ? 'Saving...' : 'Save Signal Label'}
         </button>
         {onDiscard && (
-          <button onClick={handleDiscard} className="discard-button">
+          <button onClick={() => handleDiscard()} className="discard-button">
             <kbd>D</kbd> Discard Detection
           </button>
         )}
-        <button onClick={handleBackToCrop} className="back-button">
-          Back to Manual Crop
+        <button onClick={() => handleBackToCrop()} className="back-button">
+          Skip to Next Image
         </button>
       </div>
     </div>
