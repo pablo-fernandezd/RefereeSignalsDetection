@@ -9,6 +9,7 @@ import SignalConfirmationFlow from './components/SignalConfirmationFlow';
 import SignalDetectionConfirmation from './components/SignalDetectionConfirmation';
 import LabelingQueue from './components/LabelingQueue';
 import ModelTraining from './components/ModelTraining';
+import ModelManagement from './components/ModelManagement';
 import './App.css';
 
 const BACKEND_URL = 'http://localhost:5000';
@@ -463,6 +464,8 @@ function App() {
                 return <YouTubeProcessing onViewAssets={handleViewAssets} refreshTrigger={refreshTrigger} />;
             case 'training':
                 return <ModelTraining />;
+            case 'models':
+                return <ModelManagement />;
             case 'labelingQueue':
                 return <LabelingQueue onBack={() => handleNavigate('dashboard')} />;
             default:
@@ -589,6 +592,12 @@ function App() {
                                 onClick={() => handleNavigate('training')}
                             >
                                 Model Training
+                            </button>
+                            <button 
+                                className={`nav-button ${currentView === 'models' ? 'active' : ''}`}
+                                onClick={() => handleNavigate('models')}
+                            >
+                                Model Registry
                             </button>
                             <button 
                                 className="theme-toggle"

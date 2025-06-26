@@ -35,25 +35,76 @@ youtube_processor = YouTubeProcessor()
 
 @youtube_bp.route('/process', methods=['POST'])
 def process_youtube_video():
-    """Process a YouTube video for referee detection."""
+    """Process a YouTube video."""
     try:
-        data = request.json
+        data = request.get_json()
         url = data.get('url')
         auto_label = data.get('auto_label', True)
         
         if not url:
             return jsonify({'error': 'URL is required'}), 400
         
-        def process_video():
-            youtube_processor.download_youtube_video(url, auto_label)
+        # Validate YouTube URL
+        if 'youtube.com' not in url and 'youtu.be' not in url:
+            return jsonify({'error': 'Please provide a valid YouTube URL'}), 400
         
-        # Start processing in background thread
-        thread = threading.Thread(target=process_video)
-        thread.start()
+        processor = YouTubeProcessor()
         
-        return jsonify({'status': 'processing_started', 'url': url})
+        # Enhanced error handling for YouTube download issues
+        try:
+            result = processor.download_youtube_video(url, auto_label)
+            
+            if 'error' in result:
+                error_msg = result['error']
+                
+                # Provide specific user-friendly error messages
+                if 'HTTP Error 403' in error_msg or 'Forbidden' in error_msg:
+                    return jsonify({
+                        'error': 'YouTube access denied. This could be due to:\n'
+                                '• Geographic restrictions\n'
+                                '• Age-restricted content\n'
+                                '• Private video\n'
+                                '• YouTube anti-bot measures\n\n'
+                                'Try a different video or wait a few minutes before retrying.'
+                    }), 403
+                
+                elif 'HTTP Error 404' in error_msg or 'not found' in error_msg.lower():
+                    return jsonify({
+                        'error': 'Video not found. Please check the URL and make sure the video exists.'
+                    }), 404
+                
+                elif 'nsig extraction failed' in error_msg or 'Precondition check failed' in error_msg:
+                    return jsonify({
+                        'error': 'YouTube download temporarily blocked. This is usually temporary.\n'
+                                'Suggestions:\n'
+                                '• Wait 10-15 minutes and try again\n'
+                                '• Try a different video\n'
+                                '• The system has been updated with latest fixes'
+                    }), 429
+                
+                elif 'network' in error_msg.lower() or 'connection' in error_msg.lower():
+                    return jsonify({
+                        'error': 'Network connection issue. Please check your internet connection and try again.'
+                    }), 503
+                
+                else:
+                    return jsonify({
+                        'error': f'Download failed: {error_msg}\n\n'
+                                'The system uses the latest yt-dlp version with enhanced anti-detection measures.'
+                    }), 500
+            
+            return jsonify(result)
+            
+        except Exception as download_error:
+            logger.error(f"YouTube download error: {download_error}")
+            return jsonify({
+                'error': f'Unexpected error during download: {str(download_error)}\n\n'
+                        'The system has been updated with the latest YouTube download fixes. '
+                        'If this persists, try a different video or wait a few minutes.'
+            }), 500
         
     except Exception as e:
+        logger.error(f"Error in process_youtube_video: {e}")
         return jsonify({'error': str(e)}), 500
 
 @youtube_bp.route('/status/<folder_name>', methods=['GET'])

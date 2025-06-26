@@ -1,6 +1,6 @@
 Flask==2.3.3
 Flask-CORS==4.0.0
-yt-dlp==2023.11.16
+yt-dlp>=2025.6.9
 opencv-python==4.8.1.78
 torch==2.1.0
 torchvision==0.16.0

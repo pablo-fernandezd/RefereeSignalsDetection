@@ -1,94 +1,211 @@
 {
   "referee": [
     {
-      "model_id": "referee_yolov8n_20250625_185543",
+      "model_id": "referee_legacy_20250626_011854",
       "model_type": "referee",
-      "version": "v1.0_yolov8n",
-      "created_at": "2025-06-25T18:55:43.444690",
-      "is_active": false,
-      "source": "ultralytics",
-      "file_path": "D:\\RefereeDetection\\backend\\model_registry\\models\\referee_yolov8n_20250625_185543.pt",
-      "file_size_mb": 0,
-      "model_hash": null,
-      "performance_metrics": {},
+      "version": "v1.0_legacy",
+      "created_at": "2025-06-26T01:18:54.338493",
+      "is_active": true,
+      "source": "legacy",
+      "file_path": "D:\\RefereeDetection\\backend\\model_registry\\models\\referee_legacy_20250626_011854.pt",
+      "file_size_mb": 5.3016767501831055,
+      "model_hash": "7fe2a0e64dd84a154275ccbbb8ce631b884aa09d085790c9509982f6abe14b34",
+      "performance_metrics": {
+        "last_inference": "2025-06-26T01:31:36.528933"
+      },
       "training_config": {},
-      "ultralytics_info": {},
+      "ultralytics_info": {
+        "nc": 1,
+        "names": {
+          "0": "referee"
+        },
+        "task": "detect"
+      },
       "tags": [
-        "ultralytics",
-        "yolov8n",
-        "referee"
+        "legacy",
+        "imported",
+        "referee",
+        "yolov8",
+        "yolo11",
+        "yolo11n"
       ],
-      "description": "Default nano model for referee detection",
+      "description": "Imported legacy referee detection model",
       "download_count": 0,
-      "last_used": null
-    },
-    {
-      "model_id": "referee_yolov8s_20250625_185543",
-      "model_type": "referee",
-      "version": "v1.0_yolov8s",
-      "created_at": "2025-06-25T18:55:43.444690",
-      "is_active": false,
-      "source": "ultralytics",
-      "file_path": "D:\\RefereeDetection\\backend\\model_registry\\models\\referee_yolov8s_20250625_185543.pt",
-      "file_size_mb": 0,
-      "model_hash": null,
-      "performance_metrics": {},
-      "training_config": {},
-      "ultralytics_info": {},
-      "tags": [
-        "ultralytics",
-        "yolov8s",
-        "referee"
-      ],
-      "description": "Default small model for referee detection",
-      "download_count": 0,
-      "last_used": null
+      "last_used": "2025-06-26T01:59:29.600854",
+      "yolo_version": "yolo11",
+      "yolo_architecture": "yolo11n",
+      "compatibility_status": "compatible",
+      "validation_results": {
+        "confidence": 0.9,
+        "issues": [],
+        "recommendations": [],
+        "model_info": {
+          "task": "detect",
+          "nc": 1,
+          "names": {
+            "0": "referee"
+          },
+          "device": "cpu",
+          "model_type": "YOLO"
+        },
+        "performance_test": {
+          "success": true,
+          "model_info": {
+            "task": "detect",
+            "nc": 1,
+            "names": {
+              "0": "referee"
+            },
+            "device": "cpu",
+            "model_type": "YOLO"
+          },
+          "error": null,
+          "load_time": 0.0671541690826416,
+          "prediction_test": true
+        },
+        "detection_details": {
+          "detected_version": "yolo11",
+          "confidence": 0.9,
+          "architecture": "yolo11n",
+          "supported": true,
+          "framework": "ultralytics",
+          "model_info": {
+            "task": "detect",
+            "mode": "predict",
+            "nc": 1,
+            "names": {
+              "0": "referee"
+            }
+          },
+          "validation_result": {
+            "can_load": true,
+            "can_predict": true,
+            "input_shape": null,
+            "output_shape": "boxes: torch.Size([0, 6])",
+            "error": null
+          },
+          "error": null
+        }
+      },
+      "base_model_version": null
     }
   ],
   "signal": [
     {
-      "model_id": "signal_yolov8n_20250625_185543",
+      "model_id": "signal_legacy_20250626_011854",
       "model_type": "signal",
-      "version": "v1.0_yolov8n",
-      "created_at": "2025-06-25T18:55:43.450593",
-      "is_active": false,
-      "source": "ultralytics",
-      "file_path": "D:\\RefereeDetection\\backend\\model_registry\\models\\signal_yolov8n_20250625_185543.pt",
-      "file_size_mb": 0,
-      "model_hash": null,
-      "performance_metrics": {},
+      "version": "v1.0_legacy",
+      "created_at": "2025-06-26T01:18:54.461570",
+      "is_active": true,
+      "source": "legacy",
+      "file_path": "D:\\RefereeDetection\\backend\\model_registry\\models\\signal_legacy_20250626_011854.pt",
+      "file_size_mb": 5.222735404968262,
+      "model_hash": "7a648d5a0693b722796af8620210ce09069cc96942bbcf117380fada501c2ab6",
+      "performance_metrics": {
+        "last_inference": "2025-06-26T02:54:00.280054"
+      },
       "training_config": {},
-      "ultralytics_info": {},
+      "ultralytics_info": {
+        "nc": 8,
+        "names": {
+          "0": "armLeft",
+          "1": "armRight",
+          "2": "hits",
+          "3": "leftServe",
+          "4": "net",
+          "5": "outside",
+          "6": "rightServe",
+          "7": "touched"
+        },
+        "task": "detect"
+      },
       "tags": [
-        "ultralytics",
-        "yolov8n",
-        "signal"
+        "legacy",
+        "imported",
+        "signal",
+        "yolov5",
+        "yolov5n"
       ],
-      "description": "Default nano model for signal detection",
+      "description": "Imported legacy signal detection model",
       "download_count": 0,
-      "last_used": null
-    },
-    {
-      "model_id": "signal_yolov8s_20250625_185543",
-      "model_type": "signal",
-      "version": "v1.0_yolov8s",
-      "created_at": "2025-06-25T18:55:43.451625",
-      "is_active": false,
-      "source": "ultralytics",
-      "file_path": "D:\\RefereeDetection\\backend\\model_registry\\models\\signal_yolov8s_20250625_185543.pt",
-      "file_size_mb": 0,
-      "model_hash": null,
-      "performance_metrics": {},
-      "training_config": {},
-      "ultralytics_info": {},
-      "tags": [
-        "ultralytics",
-        "yolov8s",
-        "signal"
-      ],
-      "description": "Default small model for signal detection",
-      "download_count": 0,
-      "last_used": null
+      "last_used": null,
+      "yolo_version": "yolov5",
+      "yolo_architecture": "yolov5n",
+      "compatibility_status": "compatible",
+      "validation_results": {
+        "confidence": 0.8,
+        "issues": [],
+        "recommendations": [],
+        "model_info": {
+          "task": "detect",
+          "nc": 8,
+          "names": {
+            "0": "armLeft",
+            "1": "armRight",
+            "2": "hits",
+            "3": "leftServe",
+            "4": "net",
+            "5": "outside",
+            "6": "rightServe",
+            "7": "touched"
+          },
+          "device": "cpu",
+          "model_type": "YOLO"
+        },
+        "performance_test": {
+          "success": true,
+          "model_info": {
+            "task": "detect",
+            "nc": 8,
+            "names": {
+              "0": "armLeft",
+              "1": "armRight",
+              "2": "hits",
+              "3": "leftServe",
+              "4": "net",
+              "5": "outside",
+              "6": "rightServe",
+              "7": "touched"
+            },
+            "device": "cpu",
+            "model_type": "YOLO"
+          },
+          "error": null,
+          "load_time": 0.049508094787597656,
+          "prediction_test": true
+        },
+        "detection_details": {
+          "detected_version": "yolov5",
+          "confidence": 0.8,
+          "architecture": "yolov5n",
+          "supported": true,
+          "framework": "ultralytics",
+          "model_info": {
+            "task": "detect",
+            "mode": "predict",
+            "nc": 8,
+            "names": {
+              "0": "armLeft",
+              "1": "armRight",
+              "2": "hits",
+              "3": "leftServe",
+              "4": "net",
+              "5": "outside",
+              "6": "rightServe",
+              "7": "touched"
+            }
+          },
+          "validation_result": {
+            "can_load": true,
+            "can_predict": true,
+            "input_shape": null,
+            "output_shape": "boxes: torch.Size([0, 6])",
+            "error": null
+          },
+          "error": null
+        }
+      },
+      "base_model_version": null
     }
   ]
 }

@@ -93,7 +93,7 @@ def create_app():
     app.register_blueprint(training_bp, url_prefix='/api')
     app.register_blueprint(youtube_bp, url_prefix='/api/youtube')
     app.register_blueprint(queue_bp, url_prefix='/api/queue')
-    app.register_blueprint(model_bp)
+    app.register_blueprint(model_bp, url_prefix='/api/models')
     
     # Register error handlers
     register_error_handlers(app)

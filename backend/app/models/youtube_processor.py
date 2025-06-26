@@ -301,15 +301,67 @@ class YouTubeProcessor:
             ydl_opts = {
                 'outtmpl': str(output_dir / '%(title)s.%(ext)s'),
                 'merge_output_format': 'mp4',
-                'cookiesfrombrowser': ('firefox',),
                 'quiet': True,
                 'noplaylist': True,
-                'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-                'progress_hooks': [progress_hook]
+                'format': 'best[height<=720][ext=mp4]/best[height<=720]/best[ext=mp4]/best',
+                'progress_hooks': [progress_hook],
+                # Enhanced options to handle YouTube restrictions
+                'extractor_retries': 3,
+                'fragment_retries': 3,
+                'retry_sleep_functions': {'http': lambda n: min(4 ** n, 60)},
+                'http_chunk_size': 10485760,  # 10MB chunks
+                'no_warnings': False,
+                'ignoreerrors': False,
+                # User agent and headers to avoid detection
+                'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'referer': 'https://www.youtube.com/',
+                # Additional anti-detection measures
+                'sleep_interval': 1,
+                'max_sleep_interval': 5,
+                'sleep_interval_requests': 1,
+                # Try to use cookies from browser if available
+                'cookiesfrombrowser': None,  # Disable automatic cookie extraction for now
+                # Fallback options
+                'prefer_free_formats': True,
+                'youtube_include_dash_manifest': False,
             }
             
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
+            # Try download with primary options
+            try:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    ydl.download([url])
+            except Exception as primary_error:
+                logger.warning(f"Primary download failed: {primary_error}")
+                logger.info("Trying fallback download options...")
+                
+                # Fallback options with more conservative settings
+                fallback_opts = {
+                    'outtmpl': str(output_dir / '%(title)s.%(ext)s'),
+                    'format': 'worst[ext=mp4]/worst',  # Use worst quality as fallback
+                    'quiet': True,
+                    'noplaylist': True,
+                    'progress_hooks': [progress_hook],
+                    'extractor_retries': 5,
+                    'fragment_retries': 5,
+                    'retry_sleep_functions': {'http': lambda n: min(8 ** n, 120)},
+                    'http_chunk_size': 1048576,  # 1MB chunks (smaller)
+                    'user_agent': 'yt-dlp/2025.6.9',  # Use default yt-dlp user agent
+                    'sleep_interval': 2,
+                    'max_sleep_interval': 10,
+                    'prefer_free_formats': True,
+                    'youtube_include_dash_manifest': False,
+                    'no_check_certificate': True,
+                }
+                
+                try:
+                    with yt_dlp.YoutubeDL(fallback_opts) as ydl:
+                        ydl.download([url])
+                        logger.info("Fallback download succeeded")
+                except Exception as fallback_error:
+                    logger.error(f"Both primary and fallback downloads failed")
+                    logger.error(f"Primary error: {primary_error}")
+                    logger.error(f"Fallback error: {fallback_error}")
+                    raise fallback_error
             
             # Find the downloaded video file
             video_files = list(output_dir.glob("*.mp4"))

@@ -183,6 +183,8 @@ body {
   position: sticky;
   top: 0;
   z-index: 100;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .nav-container {
@@ -208,7 +210,7 @@ body {
 
 /* Theme Toggle */
 .theme-toggle {
-  background: none;
+  background: var(--surface-secondary);
   border: 2px solid var(--surface-border);
   border-radius: var(--radius-lg);
   padding: var(--spacing-sm);
@@ -220,12 +222,18 @@ body {
   justify-content: center;
   width: 40px;
   height: 40px;
+  font-size: 1.2rem;
 }
 
 .theme-toggle:hover {
   border-color: var(--interactive-primary);
   color: var(--interactive-primary);
   background-color: var(--primary-light);
+  transform: scale(1.05);
+}
+
+.theme-toggle:active {
+  transform: scale(0.95);
 }
 
 /* Navigation Buttons */
@@ -453,7 +461,8 @@ body {
 }
 
 .form-group input,
-.form-group textarea {
+.form-group textarea,
+.form-group select {
   width: 100%;
   padding: var(--spacing-md);
   border: 1px solid var(--surface-border);
@@ -465,7 +474,8 @@ body {
 }
 
 .form-group input:focus,
-.form-group textarea:focus {
+.form-group textarea:focus,
+.form-group select:focus {
   outline: none;
   border-color: var(--interactive-primary);
   box-shadow: 0 0 0 3px var(--primary-light);
@@ -499,27 +509,22 @@ body {
 }
 
 .btn:active {
-  background-color: var(--interactive-active);
   transform: translateY(0);
 }
 
 .btn:disabled {
-  background-color: var(--interactive-disabled);
+  opacity: 0.6;
   cursor: not-allowed;
   transform: none;
-  box-shadow: none;
 }
 
 .btn-secondary {
-  background-color: var(--surface-secondary);
-  color: var(--text-primary);
-  border: 1px solid var(--surface-border);
+  background-color: var(--secondary-color);
+  color: var(--text-inverse);
 }
 
 .btn-secondary:hover {
-  background-color: var(--surface-tertiary);
-  border-color: var(--interactive-primary);
-  color: var(--interactive-primary);
+  background-color: var(--secondary-hover);
 }
 
 .btn-success {
@@ -546,7 +551,7 @@ body {
   background-color: var(--error-hover);
 }
 
-/* Loading States */
+/* Loading Animation */
 .loading {
   display: inline-block;
   width: 20px;
@@ -567,27 +572,27 @@ body {
     flex-direction: column;
     gap: var(--spacing-md);
   }
-  
+
   .nav-buttons {
     flex-wrap: wrap;
     justify-content: center;
   }
-  
+
   .main-content {
-    padding: var(--spacing-md);
+    padding: var(--spacing-lg);
   }
-  
+
   .stats-container {
     grid-template-columns: 1fr;
   }
-  
+
   .main-actions {
     flex-direction: column;
     align-items: center;
   }
-  
+
   .form-container {
-    margin: var(--spacing-md);
+    margin: 0 var(--spacing-md);
   }
 }
 
@@ -624,24 +629,28 @@ body {
 .flex { display: flex; }
 .grid { display: grid; }
 
-/* Delete Button Styles */
+/* Enhanced Delete Button */
 .delete-button {
-  background-color: var(--error-color) !important;
-  color: var(--text-inverse) !important;
-  border: 2px solid var(--error-color) !important;
+  background-color: var(--error-color);
+  color: var(--text-inverse);
+  border: none;
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md) var(--spacing-lg);
+  cursor: pointer;
+  font-weight: 500;
+  transition: all var(--transition-fast);
   position: relative;
   overflow: hidden;
 }
 
 .delete-button:hover {
-  background-color: var(--error-hover) !important;
-  border-color: var(--error-hover) !important;
+  background-color: var(--error-hover);
   transform: translateY(-1px);
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-md);
 }
 
 .delete-button:active {
-  background-color: var(--error-dark) !important;
+  background-color: var(--error-dark);
   transform: translateY(0);
 }
 
@@ -652,10 +661,63 @@ body {
   left: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
   transition: left var(--transition-slow);
 }
 
 .delete-button:hover::before {
   left: 100%;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--surface-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--surface-border);
+  border-radius: var(--radius-md);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+/* Selection Styling */
+::selection {
+  background-color: var(--interactive-primary);
+  color: var(--text-inverse);
+}
+
+::-moz-selection {
+  background-color: var(--interactive-primary);
+  color: var(--text-inverse);
+}
+
+/* Focus Visible for Accessibility */
+.nav-button:focus-visible,
+.theme-toggle:focus-visible,
+.btn:focus-visible,
+.action-button:focus-visible {
+  outline: 2px solid var(--interactive-primary);
+  outline-offset: 2px;
+}
+
+/* Reduced Motion Support */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

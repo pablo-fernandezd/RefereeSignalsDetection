@@ -8,6 +8,7 @@ This module provides comprehensive model management including:
 - Active model deployment for inference
 - Model performance tracking
 - Scalable model storage and organization
+- Automatic YOLO version detection and validation
 """
 
 import os
@@ -28,6 +29,20 @@ except ImportError:
     torch = None
     ULTRALYTICS_AVAILABLE = False
 
+# Import YOLO detection utilities
+try:
+    from app.utils.model_detection import (
+        YOLOVersionDetector, 
+        ModelCompatibilityValidator, 
+        detect_and_validate_model
+    )
+    MODEL_DETECTION_AVAILABLE = True
+except ImportError:
+    YOLOVersionDetector = None
+    ModelCompatibilityValidator = None
+    detect_and_validate_model = None
+    MODEL_DETECTION_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 
@@ -40,7 +55,7 @@ class ModelMetadata:
         self.version = version
         self.created_at = datetime.now().isoformat()
         self.is_active = False
-        self.source = 'unknown'  # 'ultralytics', 'upload', 'training'
+        self.source = 'unknown'  # 'ultralytics', 'upload', 'training', 'legacy'
         self.file_path = None
         self.file_size_mb = 0
         self.model_hash = None
@@ -51,6 +66,13 @@ class ModelMetadata:
         self.description = ""
         self.download_count = 0
         self.last_used = None
+        
+        # New fields for YOLO version detection
+        self.yolo_version = None
+        self.yolo_architecture = None
+        self.compatibility_status = 'unknown'  # 'compatible', 'incompatible', 'unknown', 'warning'
+        self.validation_results = {}
+        self.base_model_version = None  # For training: what base model this was trained from
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for JSON serialization."""
@@ -70,7 +92,12 @@ class ModelMetadata:
             'tags': self.tags,
             'description': self.description,
             'download_count': self.download_count,
-            'last_used': self.last_used
+            'last_used': self.last_used,
+            'yolo_version': self.yolo_version,
+            'yolo_architecture': self.yolo_architecture,
+            'compatibility_status': self.compatibility_status,
+            'validation_results': self.validation_results,
+            'base_model_version': self.base_model_version
         }
     
     @classmethod
@@ -90,6 +117,14 @@ class ModelMetadata:
         metadata.description = data.get('description', "")
         metadata.download_count = data.get('download_count', 0)
         metadata.last_used = data.get('last_used')
+        
+        # New fields
+        metadata.yolo_version = data.get('yolo_version')
+        metadata.yolo_architecture = data.get('yolo_architecture')
+        metadata.compatibility_status = data.get('compatibility_status', 'unknown')
+        metadata.validation_results = data.get('validation_results', {})
+        metadata.base_model_version = data.get('base_model_version')
+        
         return metadata
 
 
@@ -244,6 +279,9 @@ class ModelRegistry:
     
     def _initialize_default_models(self):
         """Initialize registry with some default Ultralytics models."""
+        # First, try to import existing models from legacy directory
+        self._import_existing_models()
+        
         default_models = [
             ('referee', 'yolov8n', 'Default nano model for referee detection'),
             ('referee', 'yolov8s', 'Default small model for referee detection'),
@@ -256,6 +294,115 @@ class ModelRegistry:
                 self.add_ultralytics_model(model_type, model_name, description, auto_download=False)
             except Exception as e:
                 logger.warning(f"Failed to add default model {model_name}: {e}")
+    
+    def _import_existing_models(self):
+        """Import existing models from legacy directories into the registry."""
+        try:
+            legacy_paths = [
+                (self.base_dir / 'models' / 'bestRefereeDetection.pt', 'referee'),
+                (self.base_dir / 'models' / 'bestSignalsDetection.pt', 'signal'),
+                (self.base_dir / 'bestRefereeDetection.pt', 'referee'),
+                (self.base_dir / 'bestSignalsDetection.pt', 'signal'),
+                (self.base_dir.parent / 'models' / 'bestRefereeDetection.pt', 'referee'),
+                (self.base_dir.parent / 'models' / 'bestSignalsDetection.pt', 'signal'),
+                (self.base_dir.parent / 'bestRefereeDetection.pt', 'referee'),
+                (self.base_dir.parent / 'bestSignalsDetection.pt', 'signal'),
+            ]
+            
+            for model_path, model_type in legacy_paths:
+                if model_path.exists():
+                    try:
+                        # Generate model ID for legacy model
+                        model_id = f"{model_type}_legacy_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                        version = "v1.0_legacy"
+                        
+                        # Create metadata
+                        metadata = ModelMetadata(model_id, model_type, version)
+                        metadata.source = 'legacy'
+                        metadata.description = f"Imported legacy {model_type} detection model"
+                        metadata.tags = ['legacy', 'imported', model_type]
+                        
+                        # Copy to registry
+                        model_file = self.models_dir / f"{model_id}.pt"
+                        shutil.copy2(model_path, model_file)
+                        
+                        metadata.file_path = model_file
+                        metadata.file_size_mb = self._get_file_size_mb(model_file)
+                        metadata.model_hash = self._calculate_file_hash(model_file)
+                        
+                        # Try to get model info and detect YOLO version
+                        try:
+                            if ULTRALYTICS_AVAILABLE:
+                                model = YOLO(str(model_file))
+                                metadata.ultralytics_info = {
+                                    'nc': getattr(model.model, 'nc', 0) if hasattr(model, 'model') else 0,
+                                    'names': getattr(model.model, 'names', {}) if hasattr(model, 'model') else {},
+                                    'task': 'detect'
+                                }
+                                
+                                # Detect YOLO version automatically
+                                detection_results = self._detect_and_validate_model(model_file, model_type)
+                                metadata.yolo_version = detection_results.get('yolo_version', 'unknown')
+                                metadata.yolo_architecture = detection_results.get('yolo_architecture')
+                                metadata.compatibility_status = detection_results.get('compatibility_status', 'unknown')
+                                metadata.validation_results = detection_results.get('validation_results', {})
+                                
+                                # Add version to tags
+                                if metadata.yolo_version and metadata.yolo_version != 'unknown':
+                                    metadata.tags.append(metadata.yolo_version)
+                                if metadata.yolo_architecture:
+                                    metadata.tags.append(metadata.yolo_architecture)
+                                
+                                logger.info(f"Detected YOLO version {metadata.yolo_version} for legacy model {model_path}")
+                                
+                        except Exception as e:
+                            logger.warning(f"Could not load model info for {model_path}: {e}")
+                            # Fallback: try to detect from filename
+                            if MODEL_DETECTION_AVAILABLE:
+                                try:
+                                    detection_results = self._detect_and_validate_model(model_file, model_type)
+                                    metadata.yolo_version = detection_results.get('yolo_version', 'unknown')
+                                    metadata.yolo_architecture = detection_results.get('yolo_architecture')
+                                    metadata.compatibility_status = detection_results.get('compatibility_status', 'unknown')
+                                    metadata.validation_results = detection_results.get('validation_results', {})
+                                except Exception as e2:
+                                    logger.warning(f"Version detection also failed: {e2}")
+                                    metadata.yolo_version = 'unknown'
+                                    metadata.compatibility_status = 'unknown'
+                        
+                        # Add to registry
+                        if model_type not in self.models:
+                            self.models[model_type] = []
+                        
+                        # Check if this specific legacy model already exists by checking file path
+                        legacy_exists = any(
+                            model.source == 'legacy' and 
+                            model.file_path and 
+                            model.file_path.exists() and
+                            model.file_path.stat().st_size > 0
+                            for model in self.models[model_type]
+                        )
+                        
+                        if not legacy_exists:
+                            self.models[model_type].append(metadata)
+                            
+                            # Set as active if no other active model
+                            if not any(model.is_active for model in self.models[model_type]):
+                                metadata.is_active = True
+                                # Copy to active directory
+                                active_model_path = self.active_dir / f"active_{model_type}_detection.pt"
+                                shutil.copy2(model_file, active_model_path)
+                            
+                            logger.info(f"Imported legacy {model_type} model: {model_path}")
+                    
+                    except Exception as e:
+                        logger.warning(f"Failed to import legacy model {model_path}: {e}")
+            
+            # Save registry after importing
+            self._save_registry()
+            
+        except Exception as e:
+            logger.error(f"Failed to import existing models: {e}")
     
     def _calculate_file_hash(self, file_path: Path) -> str:
         """Calculate SHA256 hash of a file."""
@@ -297,6 +444,48 @@ class ModelRegistry:
                 metadata.ultralytics_info = model_info
                 metadata.file_size_mb = self._get_file_size_mb(model_file)
                 metadata.model_hash = self._calculate_file_hash(model_file)
+            
+            # Try to load model and get info
+            try:
+                if ULTRALYTICS_AVAILABLE:
+                    model = YOLO(str(model_file))
+                    metadata.ultralytics_info = {
+                        'nc': getattr(model.model, 'nc', 0) if hasattr(model, 'model') else 0,
+                        'names': getattr(model.model, 'names', {}) if hasattr(model, 'model') else {},
+                        'task': 'detect'
+                    }
+                    
+                    # Detect YOLO version automatically
+                    detection_results = self._detect_and_validate_model(model_file, model_type)
+                    metadata.yolo_version = detection_results.get('yolo_version', 'unknown')
+                    metadata.yolo_architecture = detection_results.get('yolo_architecture')
+                    metadata.compatibility_status = detection_results.get('compatibility_status', 'unknown')
+                    metadata.validation_results = detection_results.get('validation_results', {})
+                    
+                    # Add version to tags
+                    if metadata.yolo_version and metadata.yolo_version != 'unknown':
+                        if metadata.yolo_version not in metadata.tags:
+                            metadata.tags.append(metadata.yolo_version)
+                    if metadata.yolo_architecture:
+                        if metadata.yolo_architecture not in metadata.tags:
+                            metadata.tags.append(metadata.yolo_architecture)
+                    
+                    logger.info(f"Detected YOLO version {metadata.yolo_version} for uploaded model")
+                    
+            except Exception as e:
+                logger.warning(f"Could not load model info: {e}")
+                # Fallback: try to detect from filename only
+                if MODEL_DETECTION_AVAILABLE:
+                    try:
+                        detection_results = self._detect_and_validate_model(model_file, model_type)
+                        metadata.yolo_version = detection_results.get('yolo_version', 'unknown')
+                        metadata.yolo_architecture = detection_results.get('yolo_architecture')
+                        metadata.compatibility_status = detection_results.get('compatibility_status', 'unknown')
+                        metadata.validation_results = detection_results.get('validation_results', {})
+                    except Exception as e2:
+                        logger.warning(f"Version detection also failed: {e2}")
+                        metadata.yolo_version = 'unknown'
+                        metadata.compatibility_status = 'unknown'
             
             # Add to registry
             if model_type not in self.models:
@@ -348,8 +537,38 @@ class ModelRegistry:
                         'names': getattr(model.model, 'names', {}) if hasattr(model, 'model') else {},
                         'task': 'detect'
                     }
+                    
+                    # Detect YOLO version automatically
+                    detection_results = self._detect_and_validate_model(model_file, model_type)
+                    metadata.yolo_version = detection_results.get('yolo_version', 'unknown')
+                    metadata.yolo_architecture = detection_results.get('yolo_architecture')
+                    metadata.compatibility_status = detection_results.get('compatibility_status', 'unknown')
+                    metadata.validation_results = detection_results.get('validation_results', {})
+                    
+                    # Add version to tags
+                    if metadata.yolo_version and metadata.yolo_version != 'unknown':
+                        if metadata.yolo_version not in metadata.tags:
+                            metadata.tags.append(metadata.yolo_version)
+                    if metadata.yolo_architecture:
+                        if metadata.yolo_architecture not in metadata.tags:
+                            metadata.tags.append(metadata.yolo_architecture)
+                    
+                    logger.info(f"Detected YOLO version {metadata.yolo_version} for uploaded model")
+                    
             except Exception as e:
                 logger.warning(f"Could not load model info: {e}")
+                # Fallback: try to detect from filename only
+                if MODEL_DETECTION_AVAILABLE:
+                    try:
+                        detection_results = self._detect_and_validate_model(model_file, model_type)
+                        metadata.yolo_version = detection_results.get('yolo_version', 'unknown')
+                        metadata.yolo_architecture = detection_results.get('yolo_architecture')
+                        metadata.compatibility_status = detection_results.get('compatibility_status', 'unknown')
+                        metadata.validation_results = detection_results.get('validation_results', {})
+                    except Exception as e2:
+                        logger.warning(f"Version detection also failed: {e2}")
+                        metadata.yolo_version = 'unknown'
+                        metadata.compatibility_status = 'unknown'
             
             # Add to registry
             if model_type not in self.models:
@@ -505,6 +724,37 @@ class ModelRegistry:
             logger.error(f"Failed to update model metrics: {e}")
             return False
     
+    def update_model_metadata(self, model_id: str, description: Optional[str] = None, 
+                            tags: Optional[List[str]] = None, 
+                            performance_metrics: Optional[Dict[str, Any]] = None,
+                            training_config: Optional[Dict[str, Any]] = None) -> Tuple[bool, str]:
+        """Update model metadata (description, tags, metrics, etc.)."""
+        try:
+            for models in self.models.values():
+                for model in models:
+                    if model.model_id == model_id:
+                        # Update fields if provided
+                        if description is not None:
+                            model.description = description
+                        if tags is not None:
+                            model.tags = tags
+                        if performance_metrics is not None:
+                            model.performance_metrics.update(performance_metrics)
+                        if training_config is not None:
+                            model.training_config.update(training_config)
+                        
+                        # Update modified timestamp
+                        model.last_used = datetime.now().isoformat()
+                        
+                        self._save_registry()
+                        logger.info(f"Updated metadata for model {model_id}")
+                        return True, "Model metadata updated successfully"
+            
+            return False, f"Model {model_id} not found"
+        except Exception as e:
+            logger.error(f"Failed to update model metadata: {e}")
+            return False, str(e)
+    
     def get_registry_stats(self) -> Dict[str, Any]:
         """Get statistics about the model registry."""
         stats = {
@@ -532,6 +782,183 @@ class ModelRegistry:
                 stats['total_size_mb'] += model.file_size_mb
         
         return stats
+    
+    def _detect_and_validate_model(self, model_path: Path, model_type: str) -> Dict[str, Any]:
+        """
+        Detect YOLO version and validate model compatibility.
+        
+        Args:
+            model_path: Path to model file
+            model_type: Expected model type
+            
+        Returns:
+            Detection and validation results
+        """
+        if not MODEL_DETECTION_AVAILABLE:
+            logger.warning("Model detection utilities not available")
+            return {
+                'yolo_version': 'unknown',
+                'yolo_architecture': None,
+                'compatibility_status': 'unknown',
+                'validation_results': {'error': 'Detection utilities not available'}
+            }
+        
+        try:
+            # Run detection and validation
+            results = detect_and_validate_model(model_path, model_type)
+            
+            # Extract key information
+            version_info = results.get('version_detection', {})
+            validation_info = results.get('compatibility_validation', {})
+            summary = results.get('summary', {})
+            
+            # Determine compatibility status
+            compatibility_status = 'unknown'
+            if summary.get('is_valid', False):
+                compatibility_status = 'compatible'
+            elif summary.get('is_compatible', False):
+                compatibility_status = 'warning'  # Compatible but with issues
+            elif summary.get('main_issues'):
+                compatibility_status = 'incompatible'
+            
+            return {
+                'yolo_version': summary.get('detected_version', 'unknown'),
+                'yolo_architecture': version_info.get('architecture'),
+                'compatibility_status': compatibility_status,
+                'validation_results': {
+                    'confidence': summary.get('confidence', 0.0),
+                    'issues': summary.get('main_issues', []),
+                    'recommendations': summary.get('recommendations', []),
+                    'model_info': validation_info.get('model_info', {}),
+                    'performance_test': validation_info.get('performance_test', {}),
+                    'detection_details': version_info
+                }
+            }
+            
+        except Exception as e:
+            logger.error(f"Model detection failed: {e}")
+            return {
+                'yolo_version': 'unknown',
+                'yolo_architecture': None,
+                'compatibility_status': 'unknown',
+                'validation_results': {'error': str(e)}
+            }
+    
+    def validate_model_for_training(self, model_id: str) -> Tuple[bool, str, Dict[str, Any]]:
+        """
+        Validate if a model can be used for training.
+        
+        Args:
+            model_id: ID of the model to validate
+            
+        Returns:
+            Tuple of (can_train, message, validation_details)
+        """
+        # Find the model
+        model_metadata = None
+        for models in self.models.values():
+            for model in models:
+                if model.model_id == model_id:
+                    model_metadata = model
+                    break
+            if model_metadata:
+                break
+        
+        if not model_metadata:
+            return False, f"Model {model_id} not found", {}
+        
+        if not model_metadata.file_path or not model_metadata.file_path.exists():
+            return False, f"Model file not found: {model_metadata.file_path}", {}
+        
+        # Check compatibility status
+        if model_metadata.compatibility_status == 'incompatible':
+            issues = model_metadata.validation_results.get('issues', [])
+            return False, f"Model is incompatible: {'; '.join(issues)}", model_metadata.validation_results
+        
+        # Check if it's a supported YOLO version
+        if MODEL_DETECTION_AVAILABLE:
+            supported_versions = YOLOVersionDetector.get_supported_versions()
+            if model_metadata.yolo_version and model_metadata.yolo_version not in supported_versions:
+                return False, f"YOLO version '{model_metadata.yolo_version}' is not supported for training", {}
+        
+        # Additional validation for training
+        validation_results = model_metadata.validation_results
+        performance_test = validation_results.get('performance_test', {})
+        
+        if not performance_test.get('success', False):
+            return False, f"Model failed performance test: {performance_test.get('error', 'unknown error')}", validation_results
+        
+        # Check if model can be loaded for training
+        try:
+            if ULTRALYTICS_AVAILABLE:
+                model = YOLO(str(model_metadata.file_path))
+                # Test that we can access model for training
+                if not hasattr(model, 'model') or model.model is None:
+                    return False, "Model structure is not accessible for training", {}
+        except Exception as e:
+            return False, f"Cannot load model for training: {str(e)}", {}
+        
+        return True, "Model is ready for training", validation_results
+    
+    def update_model_yolo_version(self, model_id: str, yolo_version: str, yolo_architecture: str = None) -> Tuple[bool, str]:
+        """
+        Manually update the YOLO version information for a model.
+        
+        Args:
+            model_id: ID of the model to update
+            yolo_version: YOLO version (e.g., 'yolov8', 'yolo11', 'yolov12')
+            yolo_architecture: Specific architecture (e.g., 'yolov8n', 'yolo11s')
+            
+        Returns:
+            Tuple of (success, message)
+        """
+        # Find the model
+        model_metadata = None
+        for models in self.models.values():
+            for model in models:
+                if model.model_id == model_id:
+                    model_metadata = model
+                    break
+            if model_metadata:
+                break
+        
+        if not model_metadata:
+            return False, f"Model {model_id} not found"
+        
+        # Validate the version
+        if MODEL_DETECTION_AVAILABLE:
+            version_info = YOLOVersionDetector.get_version_info(yolo_version)
+            if not version_info:
+                return False, f"Unknown YOLO version: {yolo_version}"
+            
+            # Check if architecture matches version
+            if yolo_architecture and yolo_architecture not in version_info.get('architecture_names', []):
+                return False, f"Architecture {yolo_architecture} is not valid for {yolo_version}"
+        
+        # Update metadata
+        old_version = model_metadata.yolo_version
+        model_metadata.yolo_version = yolo_version
+        model_metadata.yolo_architecture = yolo_architecture
+        
+        # Update compatibility status based on new version
+        if MODEL_DETECTION_AVAILABLE:
+            version_info = YOLOVersionDetector.get_version_info(yolo_version)
+            if version_info and version_info.get('supported', False):
+                model_metadata.compatibility_status = 'compatible'
+            else:
+                model_metadata.compatibility_status = 'warning'
+        
+        # Add to tags if not already there
+        if yolo_version not in model_metadata.tags:
+            model_metadata.tags.append(yolo_version)
+        if yolo_architecture and yolo_architecture not in model_metadata.tags:
+            model_metadata.tags.append(yolo_architecture)
+        
+        # Save changes
+        self._save_registry()
+        
+        logger.info(f"Updated model {model_id} YOLO version from {old_version} to {yolo_version}")
+        return True, f"YOLO version updated to {yolo_version}"
 
 
 # Global registry instance
