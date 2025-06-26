@@ -1,298 +1,299 @@
 /**
- * API Service for Referee Detection System
+ * API Service Layer
  * 
- * This module provides a centralized interface for all backend API communication,
- * including error handling, request retries, and response formatting.
+ * Centralized API communication with error handling, retry logic,
+ * and proper response processing.
  */
 
-import { API_CONFIG, API_ENDPOINTS, ERROR_MESSAGES } from '../constants';
+import { API_CONFIG } from '../constants';
 
 /**
  * Custom error class for API-related errors
  */
-class APIError extends Error {
-  constructor(message, status = null, data = null) {
+export class ApiError extends Error {
+  constructor(message, status, response) {
     super(message);
-    this.name = 'APIError';
+    this.name = 'ApiError';
     this.status = status;
-    this.data = data;
+    this.response = response;
   }
 }
 
 /**
- * Main API service class
+ * Base API client with common functionality
  */
-class APIService {
-  constructor() {
-    this.baseURL = API_CONFIG.BASE_URL;
+class ApiClient {
+  constructor(baseURL = API_CONFIG.BASE_URL) {
+    this.baseURL = baseURL;
     this.timeout = API_CONFIG.TIMEOUT;
-    this.retryAttempts = API_CONFIG.RETRY_ATTEMPTS;
   }
 
   /**
-   * Make a HTTP request with error handling and retries
-   * @param {string} endpoint - API endpoint
-   * @param {Object} options - Fetch options
-   * @param {number} retryCount - Current retry count
-   * @returns {Promise<Object>} - Response data
+   * Make HTTP request with error handling
    */
-  async makeRequest(endpoint, options = {}, retryCount = 0) {
+  async request(endpoint, options = {}) {
     const url = `${this.baseURL}${endpoint}`;
-    
-    const defaultOptions = {
+    const config = {
+      timeout: this.timeout,
       headers: {
         'Content-Type': 'application/json',
         ...options.headers
       },
-      timeout: this.timeout,
       ...options
     };
 
-    // Remove Content-Type for FormData
-    if (options.body instanceof FormData) {
-      delete defaultOptions.headers['Content-Type'];
-    }
-
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), this.timeout);
-
-      const response = await fetch(url, {
-        ...defaultOptions,
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
-
+      const response = await fetch(url, config);
+      
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new APIError(
+        throw new ApiError(
           errorData.error || `HTTP ${response.status}: ${response.statusText}`,
           response.status,
           errorData
         );
       }
 
-      return await response.json();
+      // Handle different content types
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        return await response.json();
+      }
+      
+      return response;
     } catch (error) {
-      // Handle network errors and retries
-      if (error.name === 'AbortError') {
-        error.message = ERROR_MESSAGES.NETWORK_ERROR;
+      if (error instanceof ApiError) {
+        throw error;
       }
-
-      if (retryCount < this.retryAttempts && this.shouldRetry(error)) {
-        console.warn(`Request failed, retrying... (${retryCount + 1}/${this.retryAttempts})`);
-        await this.delay(1000 * (retryCount + 1)); // Exponential backoff
-        return this.makeRequest(endpoint, options, retryCount + 1);
-      }
-
-      throw error;
+      
+      // Handle network errors, timeouts, etc.
+      throw new ApiError(
+        error.message || 'Network error occurred',
+        0,
+        null
+      );
     }
   }
 
   /**
-   * Determine if a request should be retried
-   * @param {Error} error - The error that occurred
-   * @returns {boolean} - Whether to retry the request
+   * GET request
    */
-  shouldRetry(error) {
-    // Retry on network errors or specific HTTP status codes
-    return error.name === 'AbortError' || 
-           error.name === 'TypeError' ||
-           (error.status >= 500 && error.status < 600);
+  async get(endpoint, params = {}) {
+    const searchParams = new URLSearchParams(params);
+    const url = searchParams.toString() ? `${endpoint}?${searchParams}` : endpoint;
+    return this.request(url, { method: 'GET' });
   }
 
   /**
-   * Delay helper for retries
-   * @param {number} ms - Milliseconds to delay
-   * @returns {Promise} - Promise that resolves after delay
+   * POST request
    */
-  delay(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+  async post(endpoint, data = null, options = {}) {
+    const config = { method: 'POST', ...options };
+    
+    if (data) {
+      if (data instanceof FormData) {
+        // Remove Content-Type header for FormData (let browser set it)
+        delete config.headers?.['Content-Type'];
+        config.body = data;
+      } else {
+        config.body = JSON.stringify(data);
+      }
+    }
+    
+    return this.request(endpoint, config);
   }
 
-  // Image Processing API calls
-  async uploadImage(file) {
-    const formData = new FormData();
-    formData.append('image', file);
-
-    return this.makeRequest(API_ENDPOINTS.UPLOAD, {
-      method: 'POST',
-      body: formData
-    });
-  }
-
-  async confirmCrop(data) {
-    return this.makeRequest(API_ENDPOINTS.CONFIRM_CROP, {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  }
-
-  async manualCrop(data) {
-    return this.makeRequest(API_ENDPOINTS.MANUAL_CROP, {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  }
-
-  async processSignal(data) {
-    return this.makeRequest(API_ENDPOINTS.PROCESS_SIGNAL, {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  }
-
-  async confirmSignal(data) {
-    return this.makeRequest(API_ENDPOINTS.CONFIRM_SIGNAL, {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  }
-
-  // Queue Management API calls
-  async getPendingImages() {
-    return this.makeRequest(API_ENDPOINTS.PENDING_IMAGES);
-  }
-
-  async processQueuedImageReferee(data) {
-    return this.makeRequest(API_ENDPOINTS.PROCESS_QUEUED_IMAGE_REFEREE, {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  }
-
-  async processCropForSignal(data) {
-    return this.makeRequest(API_ENDPOINTS.PROCESS_CROP_FOR_SIGNAL, {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  }
-
-  async deleteQueuedImage(filename) {
-    return this.makeRequest(`${API_ENDPOINTS.DELETE_QUEUED_IMAGE}/${filename}`, {
-      method: 'DELETE'
-    });
-  }
-
-  // Training Data API calls
-  async getRefereeTrainingCount() {
-    return this.makeRequest(API_ENDPOINTS.REFEREE_TRAINING_COUNT);
-  }
-
-  async getSignalClasses() {
-    return this.makeRequest(API_ENDPOINTS.SIGNAL_CLASSES);
-  }
-
-  async getSignalClassCounts() {
-    return this.makeRequest(API_ENDPOINTS.SIGNAL_CLASS_COUNTS);
-  }
-
-  async moveRefereeTraining() {
-    return this.makeRequest(API_ENDPOINTS.MOVE_REFEREE_TRAINING, {
-      method: 'POST'
-    });
-  }
-
-  async moveSignalTraining() {
-    return this.makeRequest(API_ENDPOINTS.MOVE_SIGNAL_TRAINING, {
-      method: 'POST'
-    });
-  }
-
-  // YouTube Processing API calls
-  async processYouTubeVideo(data) {
-    return this.makeRequest(API_ENDPOINTS.YOUTUBE_PROCESS, {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  }
-
-  async getYouTubeStatus(folderName) {
-    return this.makeRequest(`${API_ENDPOINTS.YOUTUBE_STATUS}/${folderName}`);
-  }
-
-  async getAllYouTubeVideos() {
-    return this.makeRequest(API_ENDPOINTS.YOUTUBE_VIDEOS);
-  }
-
-  async getVideoFrames(folderName, params = {}) {
-    const queryString = new URLSearchParams(params).toString();
-    const endpoint = `${API_ENDPOINTS.YOUTUBE_VIDEO_FRAMES}/${folderName}/frames${queryString ? '?' + queryString : ''}`;
-    return this.makeRequest(endpoint);
-  }
-
-  async getVideoCrops(folderName, params = {}) {
-    const queryString = new URLSearchParams(params).toString();
-    const endpoint = `${API_ENDPOINTS.YOUTUBE_VIDEO_FRAMES}/${folderName}/crops${queryString ? '?' + queryString : ''}`;
-    return this.makeRequest(endpoint);
-  }
-
-  async getVideoThumbnails(folderName, params = {}) {
-    const queryString = new URLSearchParams(params).toString();
-    const endpoint = `${API_ENDPOINTS.YOUTUBE_VIDEO_FRAMES}/${folderName}/thumbnails${queryString ? '?' + queryString : ''}`;
-    return this.makeRequest(endpoint);
-  }
-
-  async deleteYouTubeVideo(folderName) {
-    return this.makeRequest(`${API_ENDPOINTS.YOUTUBE_VIDEO_DELETE}/${folderName}/delete`, {
-      method: 'DELETE'
-    });
-  }
-
-  async labelYouTubeFrames(videoId, data) {
-    return this.makeRequest(`${API_ENDPOINTS.YOUTUBE_LABEL_FRAMES}/${videoId}/label_frames`, {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  }
-
-  async addYouTubeFrameToTraining(videoId, data) {
-    return this.makeRequest(`${API_ENDPOINTS.YOUTUBE_ADD_TO_TRAINING}/${videoId}/add_to_training`, {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  }
-
-  async detectYouTubeFrameSignals(videoId, data) {
-    return this.makeRequest(`${API_ENDPOINTS.YOUTUBE_DETECT_SIGNALS}/${videoId}/detect_signals`, {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  }
-
-  async autoLabelYouTubeFrames(videoId, data) {
-    return this.makeRequest(`${API_ENDPOINTS.YOUTUBE_AUTOLABEL_FRAMES}/${videoId}/autolabel_frames`, {
-      method: 'POST',
-      body: JSON.stringify(data)
-    });
-  }
-
-  // Auto-labeling API calls
-  async getPendingAutoLabelCount() {
-    return this.makeRequest(API_ENDPOINTS.AUTOLABEL_PENDING_COUNT);
-  }
-
-  // File serving helpers
-  getCropImageUrl(filename) {
-    return `${this.baseURL}${API_ENDPOINTS.CROP_IMAGE}/${filename}`;
-  }
-
-  getRefereeCropImageUrl(filename) {
-    return `${this.baseURL}${API_ENDPOINTS.REFEREE_CROP_IMAGE}/${filename}`;
-  }
-
-  getUploadedImageUrl(filename) {
-    return `${this.baseURL}${API_ENDPOINTS.UPLOADED_IMAGE}/${filename}`;
-  }
-
-  getYouTubeAssetUrl(videoId, assetType, filename) {
-    return `${this.baseURL}${API_ENDPOINTS.YOUTUBE_ASSET_FILE}/${videoId}/${assetType}/${filename}`;
+  /**
+   * DELETE request
+   */
+  async delete(endpoint) {
+    return this.request(endpoint, { method: 'DELETE' });
   }
 }
 
-// Create and export a singleton instance
-const apiService = new APIService();
+// Create API client instance
+const apiClient = new ApiClient();
 
-export default apiService;
-export { APIError }; 
+/**
+ * Image Processing API
+ */
+export const imageApi = {
+  /**
+   * Upload image for processing
+   */
+  async uploadImage(file) {
+    const formData = new FormData();
+    formData.append('image', file);
+    return apiClient.post(API_CONFIG.ENDPOINTS.UPLOAD, formData);
+  },
+
+  /**
+   * Get pending images for labeling
+   */
+  async getPendingImages() {
+    return apiClient.get(API_CONFIG.ENDPOINTS.PENDING_IMAGES);
+  },
+
+  /**
+   * Confirm crop selection
+   */
+  async confirmCrop(originalFilename, cropFilename, bbox) {
+    return apiClient.post(API_CONFIG.ENDPOINTS.CONFIRM_CROP, {
+      original_filename: originalFilename,
+      crop_filename: cropFilename,
+      bbox
+    });
+  },
+
+  /**
+   * Create manual crop
+   */
+  async createManualCrop(originalFilename, bbox, classId = 0, proceedToSignal = true) {
+    return apiClient.post(API_CONFIG.ENDPOINTS.MANUAL_CROP, {
+      original_filename: originalFilename,
+      bbox,
+      class_id: classId,
+      proceedToSignal
+    });
+  },
+
+  /**
+   * Process crop for signal detection
+   */
+  async processCropForSignal(cropFilename) {
+    return apiClient.post(API_CONFIG.ENDPOINTS.PROCESS_CROP_FOR_SIGNAL, {
+      crop_filename_for_signal: cropFilename
+    });
+  },
+
+  /**
+   * Confirm signal classification
+   */
+  async confirmSignal({
+    cropFilenameForSignal,
+    correct,
+    selectedClass,
+    signalBboxYolo,
+    originalFilename
+  }) {
+    return apiClient.post(API_CONFIG.ENDPOINTS.CONFIRM_SIGNAL, {
+      crop_filename_for_signal: cropFilenameForSignal,
+      correct,
+      selected_class: selectedClass,
+      signal_bbox_yolo: signalBboxYolo,
+      original_filename: originalFilename
+    });
+  }
+};
+
+/**
+ * Training Data API
+ */
+export const trainingApi = {
+  /**
+   * Get referee training count
+   */
+  async getRefereeTrainingCount() {
+    return apiClient.get(API_CONFIG.ENDPOINTS.REFEREE_TRAINING_COUNT);
+  },
+
+  /**
+   * Get signal classes
+   */
+  async getSignalClasses() {
+    return apiClient.get(API_CONFIG.ENDPOINTS.SIGNAL_CLASSES);
+  },
+
+  /**
+   * Get signal class counts
+   */
+  async getSignalClassCounts() {
+    return apiClient.get(API_CONFIG.ENDPOINTS.SIGNAL_CLASS_COUNTS);
+  },
+
+  /**
+   * Move referee training data
+   */
+  async moveRefereeTraining() {
+    return apiClient.post(API_CONFIG.ENDPOINTS.MOVE_REFEREE_TRAINING);
+  },
+
+  /**
+   * Move signal training data
+   */
+  async moveSignalTraining() {
+    return apiClient.post(API_CONFIG.ENDPOINTS.MOVE_SIGNAL_TRAINING);
+  },
+
+  /**
+   * Delete referee training data
+   */
+  async deleteRefereeTraining() {
+    return apiClient.post(API_CONFIG.ENDPOINTS.DELETE_REFEREE_TRAINING);
+  },
+
+  /**
+   * Delete signal training data
+   */
+  async deleteSignalTraining() {
+    return apiClient.post(API_CONFIG.ENDPOINTS.DELETE_SIGNAL_TRAINING);
+  }
+};
+
+/**
+ * YouTube Processing API
+ */
+export const youtubeApi = {
+  /**
+   * Get autolabeled frames count
+   */
+  async getAutolabeledCount() {
+    return apiClient.get(`${API_CONFIG.ENDPOINTS.YOUTUBE_AUTOLABELED}?page=1&per_page=1`);
+  },
+
+  /**
+   * Get signal detections count
+   */
+  async getSignalDetectionsCount() {
+    return apiClient.get(`${API_CONFIG.ENDPOINTS.YOUTUBE_SIGNAL_DETECTIONS}?page=1&per_page=1`);
+  }
+};
+
+/**
+ * Utility function to build image URLs
+ */
+export const buildImageUrl = (path) => {
+  if (!path) return null;
+  return path.startsWith('http') ? path : `${API_CONFIG.BASE_URL}${path}`;
+};
+
+/**
+ * Error handler utility
+ */
+export const handleApiError = (error, fallbackMessage = 'An error occurred') => {
+  console.error('API Error:', error);
+  
+  if (error instanceof ApiError) {
+    return {
+      message: error.message,
+      status: error.status,
+      response: error.response
+    };
+  }
+  
+  return {
+    message: error.message || fallbackMessage,
+    status: 0,
+    response: null
+  };
+};
+
+// Export everything
+export default {
+  imageApi,
+  trainingApi,
+  youtubeApi,
+  buildImageUrl,
+  handleApiError,
+  ApiError
+}; 

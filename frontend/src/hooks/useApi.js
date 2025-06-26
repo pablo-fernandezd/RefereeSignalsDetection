@@ -1,246 +1,430 @@
 /**
- * Custom React Hook for API Operations
+ * Custom Hooks for API State Management
  * 
- * This hook provides a unified interface for making API calls with
- * loading states, error handling, and automatic state management.
+ * These hooks encapsulate API calls and state management,
+ * providing a clean interface for components.
  */
 
 import { useState, useCallback } from 'react';
-import apiService, { APIError } from '../services/api';
-import { ERROR_MESSAGES } from '../constants';
+import { imageApi, trainingApi, youtubeApi, handleApiError } from '../services/api';
 
 /**
- * Custom hook for API operations with state management
- * @param {Object} options - Configuration options
- * @returns {Object} - API state and methods
+ * Generic hook for API calls with loading and error states
  */
-export const useApi = (options = {}) => {
-  const {
-    onSuccess = () => {},
-    onError = () => {},
-    retryOnError = false,
-    showErrorAlert = true
-  } = options;
-
+export function useApiCall(apiFunction) {
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [data, setData] = useState(null);
 
-  const execute = useCallback(async (apiCall, ...args) => {
-    setLoading(true);
-    setError(null);
-    
+  const execute = useCallback(async (...args) => {
     try {
-      const result = await apiCall(...args);
+      setLoading(true);
+      setError(null);
+      const result = await apiFunction(...args);
       setData(result);
-      onSuccess(result);
       return result;
     } catch (err) {
-      const errorMessage = err instanceof APIError 
-        ? err.message 
-        : ERROR_MESSAGES.UNKNOWN_ERROR;
-      
-      setError(errorMessage);
-      
-      if (showErrorAlert) {
-        alert(`Error: ${errorMessage}`);
-      }
-      
-      onError(err);
-      
-      if (retryOnError) {
-        console.warn('Retrying API call due to error:', errorMessage);
-        // Implement retry logic here if needed
-      }
-      
+      const errorInfo = handleApiError(err);
+      setError(errorInfo);
       throw err;
     } finally {
       setLoading(false);
     }
-  }, [onSuccess, onError, retryOnError, showErrorAlert]);
+  }, [apiFunction]);
 
   const reset = useCallback(() => {
-    setLoading(false);
-    setError(null);
     setData(null);
+    setError(null);
+    setLoading(false);
   }, []);
 
-  return {
-    loading,
-    error,
-    data,
-    execute,
-    reset
-  };
-};
-
-/**
- * Hook specifically for image upload operations
- */
-export const useImageUpload = () => {
-  const [uploadProgress, setUploadProgress] = useState(0);
-  
-  const { loading, error, data, execute, reset } = useApi({
-    onSuccess: () => setUploadProgress(100),
-    onError: () => setUploadProgress(0)
-  });
-
-  const uploadImage = useCallback(async (file) => {
-    setUploadProgress(0);
-    
-    // Simulate upload progress (in a real app, you'd track actual progress)
-    const progressInterval = setInterval(() => {
-      setUploadProgress(prev => Math.min(prev + 10, 90));
-    }, 100);
-
-    try {
-      const result = await execute(apiService.uploadImage, file);
-      clearInterval(progressInterval);
-      setUploadProgress(100);
-      return result;
-    } catch (error) {
-      clearInterval(progressInterval);
-      setUploadProgress(0);
-      throw error;
-    }
-  }, [execute]);
-
-  return {
-    loading,
-    error,
-    data,
-    uploadProgress,
-    uploadImage,
-    reset
-  };
-};
+  return { data, loading, error, execute, reset };
+}
 
 /**
  * Hook for dashboard data management
  */
-export const useDashboardData = () => {
+export function useDashboardData() {
   const [dashboardData, setDashboardData] = useState({
     refereeCounts: { positive: 0, negative: 0 },
     signalClasses: [],
     signalClassCounts: {},
-    pendingImageCount: 0,
-    pendingAutolabelCount: 0
-  });
-
-  const { loading, error, execute } = useApi({
-    onSuccess: (data) => {
-      if (data) {
-        setDashboardData(prev => ({ ...prev, ...data }));
-      }
+    pendingCounts: {
+      images: 0,
+      autolabeled: 0,
+      signalDetections: 0
     }
   });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   const fetchDashboardData = useCallback(async () => {
     try {
+      setLoading(true);
+      setError(null);
+
+      // Fetch all dashboard data concurrently
       const [
-        refereeCountsRes,
-        signalClassesRes,
-        signalCountsRes,
-        pendingImagesRes,
-        pendingAutolabelRes
-      ] = await Promise.all([
-        execute(apiService.getRefereeTrainingCount),
-        execute(apiService.getSignalClasses),
-        execute(apiService.getSignalClassCounts),
-        execute(apiService.getPendingImages),
-        execute(apiService.getPendingAutoLabelCount)
+        refereeCountsData,
+        signalClassesData,
+        signalCountsData,
+        pendingImagesData,
+        autolabeledData,
+        signalDetectionsData
+      ] = await Promise.allSettled([
+        trainingApi.getRefereeTrainingCount(),
+        trainingApi.getSignalClasses(),
+        trainingApi.getSignalClassCounts(),
+        imageApi.getPendingImages(),
+        youtubeApi.getAutolabeledCount(),
+        youtubeApi.getSignalDetectionsCount()
       ]);
 
-      const newData = {
-        refereeCounts: {
-          positive: refereeCountsRes.positive_count || 0,
-          negative: refereeCountsRes.negative_count || 0
-        },
-        signalClasses: signalClassesRes.classes || [],
-        signalClassCounts: signalCountsRes.counts || {},
-        pendingImageCount: pendingImagesRes.count || 0,
-        pendingAutolabelCount: pendingAutolabelRes.count || 0
-      };
+      // Process results
+      const refereeCounts = refereeCountsData.status === 'fulfilled' 
+        ? { positive: refereeCountsData.value.positive_count || 0, negative: refereeCountsData.value.negative_count || 0 }
+        : { positive: 0, negative: 0 };
 
-      setDashboardData(newData);
-      return newData;
-    } catch (error) {
-      console.error('Failed to fetch dashboard data:', error);
-      throw error;
+      const signalClasses = signalClassesData.status === 'fulfilled'
+        ? signalClassesData.value.classes || []
+        : [];
+
+      const signalClassCounts = signalCountsData.status === 'fulfilled'
+        ? signalCountsData.value || {}
+        : {};
+
+      const pendingImages = pendingImagesData.status === 'fulfilled'
+        ? pendingImagesData.value.count || 0
+        : 0;
+
+      const autolabeledCount = autolabeledData.status === 'fulfilled'
+        ? autolabeledData.value.total || 0
+        : 0;
+
+      const signalDetectionsCount = signalDetectionsData.status === 'fulfilled'
+        ? signalDetectionsData.value.total || 0
+        : 0;
+
+      // Ensure 'none' class is included
+      if (!signalClasses.includes('none')) {
+        signalClasses.push('none');
+      }
+
+      setDashboardData({
+        refereeCounts,
+        signalClasses,
+        signalClassCounts,
+        pendingCounts: {
+          images: pendingImages,
+          autolabeled: autolabeledCount,
+          signalDetections: signalDetectionsCount
+        }
+      });
+
+    } catch (err) {
+      const errorInfo = handleApiError(err, 'Failed to fetch dashboard data');
+      setError(errorInfo);
+      console.error('Dashboard data fetch error:', err);
+    } finally {
+      setLoading(false);
     }
-  }, [execute]);
+  }, []);
 
   return {
     dashboardData,
     loading,
     error,
     fetchDashboardData,
-    setDashboardData
+    refetchData: fetchDashboardData
   };
-};
+}
 
 /**
- * Hook for YouTube video processing
+ * Hook for image upload workflow
  */
-export const useYouTubeProcessing = () => {
-  const [videos, setVideos] = useState([]);
-  const [processingStatus, setProcessingStatus] = useState({});
+export function useImageUpload() {
+  const [uploadState, setUploadState] = useState({
+    step: 0,
+    uploadData: null,
+    imageFile: null,
+    cropUrl: null,
+    cropFilename: null,
+    originalFilename: null,
+    signalResult: null,
+    cropFilenameForSignal: null
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  const { loading, error, execute } = useApi();
+  const uploadImage = useCallback(async (file) => {
+    try {
+      setLoading(true);
+      setError(null);
+      
+      const result = await imageApi.uploadImage(file);
+      
+      setUploadState(prev => ({
+        ...prev,
+        uploadData: result,
+        imageFile: file,
+        originalFilename: result.filename,
+        cropUrl: result.crop_url ? `${window.location.origin}${result.crop_url}` : null,
+        cropFilename: result.crop_filename,
+        step: result.crop_url ? 1 : 3 // Skip to manual crop if no auto-crop
+      }));
 
-  const processVideo = useCallback(async (url, autoCrop = true) => {
-    return execute(apiService.processYouTubeVideo, { url, auto_crop: autoCrop });
-  }, [execute]);
+      return result;
+    } catch (err) {
+      const errorInfo = handleApiError(err, 'Failed to upload image');
+      setError(errorInfo);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const fetchVideos = useCallback(async () => {
-    const result = await execute(apiService.getAllYouTubeVideos);
-    setVideos(result || []);
-    return result;
-  }, [execute]);
+  const confirmCrop = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
 
-  const getVideoStatus = useCallback(async (folderName) => {
-    const status = await execute(apiService.getYouTubeStatus, folderName);
-    setProcessingStatus(prev => ({ ...prev, [folderName]: status }));
-    return status;
-  }, [execute]);
+      const result = await imageApi.confirmCrop(
+        uploadState.originalFilename,
+        uploadState.cropFilename,
+        uploadState.uploadData.bbox
+      );
 
-  const deleteVideo = useCallback(async (folderName) => {
-    await execute(apiService.deleteYouTubeVideo, folderName);
-    setVideos(prev => prev.filter(video => video.folder_name !== folderName));
-  }, [execute]);
+      if (result.status === 'warning' && result.action === 'duplicate_detected') {
+        // Handle duplicate
+        if (result.crop_filename_for_signal) {
+          const signalResult = await imageApi.processCropForSignal(result.crop_filename_for_signal);
+          setUploadState(prev => ({
+            ...prev,
+            cropFilenameForSignal: result.crop_filename_for_signal,
+            signalResult,
+            step: 2
+          }));
+        }
+        return { type: 'duplicate', ...result };
+      }
+
+      if (result.status === 'ok' && result.crop_filename_for_signal) {
+        const signalResult = await imageApi.processCropForSignal(result.crop_filename_for_signal);
+        setUploadState(prev => ({
+          ...prev,
+          cropFilenameForSignal: result.crop_filename_for_signal,
+          signalResult,
+          step: 2
+        }));
+        return { type: 'success', ...result };
+      }
+
+      throw new Error(result.error || 'Failed to confirm crop');
+    } catch (err) {
+      const errorInfo = handleApiError(err, 'Failed to confirm crop');
+      setError(errorInfo);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [uploadState.originalFilename, uploadState.cropFilename, uploadState.uploadData]);
+
+  const createManualCrop = useCallback(async (bbox, classId = 0, proceedToSignal = true) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const result = await imageApi.createManualCrop(
+        uploadState.originalFilename,
+        bbox,
+        classId,
+        proceedToSignal
+      );
+
+      if (result.status === 'warning' && result.action === 'duplicate_detected') {
+        return { type: 'duplicate', ...result };
+      }
+
+      if (result.status === 'ok') {
+        if (result.action === 'saved_as_negative') {
+          return { type: 'negative', ...result };
+        }
+
+        if (result.crop_filename_for_signal && proceedToSignal) {
+          const signalResult = await imageApi.processCropForSignal(result.crop_filename_for_signal);
+          setUploadState(prev => ({
+            ...prev,
+            cropFilenameForSignal: result.crop_filename_for_signal,
+            signalResult,
+            step: 2
+          }));
+          return { type: 'success_with_signal', ...result };
+        }
+
+        return { type: 'success', ...result };
+      }
+
+      throw new Error(result.error || 'Failed to create manual crop');
+    } catch (err) {
+      const errorInfo = handleApiError(err, 'Failed to create manual crop');
+      setError(errorInfo);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [uploadState.originalFilename]);
+
+  const confirmSignal = useCallback(async ({ correct, selectedClass, signalBboxYolo, originalFilename }) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const result = await imageApi.confirmSignal({
+        cropFilenameForSignal: uploadState.cropFilenameForSignal,
+        correct,
+        selectedClass,
+        signalBboxYolo,
+        originalFilename: originalFilename || uploadState.originalFilename
+      });
+
+      return result;
+    } catch (err) {
+      const errorInfo = handleApiError(err, 'Failed to confirm signal');
+      setError(errorInfo);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, [uploadState.cropFilenameForSignal, uploadState.originalFilename]);
+
+  const resetUploadFlow = useCallback(() => {
+    setUploadState({
+      step: 0,
+      uploadData: null,
+      imageFile: null,
+      cropUrl: null,
+      cropFilename: null,
+      originalFilename: null,
+      signalResult: null,
+      cropFilenameForSignal: null
+    });
+    setError(null);
+  }, []);
+
+  const setStep = useCallback((step) => {
+    setUploadState(prev => ({ ...prev, step }));
+  }, []);
 
   return {
-    videos,
-    processingStatus,
+    uploadState,
     loading,
     error,
-    processVideo,
-    fetchVideos,
-    getVideoStatus,
-    deleteVideo
+    uploadImage,
+    confirmCrop,
+    createManualCrop,
+    confirmSignal,
+    resetUploadFlow,
+    setStep
   };
-};
+}
 
 /**
  * Hook for training data operations
  */
-export const useTrainingData = () => {
-  const { loading, error, execute } = useApi();
+export function useTrainingData() {
+  const [messages, setMessages] = useState({
+    moveReferee: '',
+    moveSignal: '',
+    deleteReferee: '',
+    deleteSignal: ''
+  });
 
-  const moveRefereeTraining = useCallback(async () => {
-    return execute(apiService.moveRefereeTraining);
-  }, [execute]);
+  const moveRefereeTraining = useApiCall(trainingApi.moveRefereeTraining);
+  const moveSignalTraining = useApiCall(trainingApi.moveSignalTraining);
+  const deleteRefereeTraining = useApiCall(trainingApi.deleteRefereeTraining);
+  const deleteSignalTraining = useApiCall(trainingApi.deleteSignalTraining);
 
-  const moveSignalTraining = useCallback(async () => {
-    return execute(apiService.moveSignalTraining);
-  }, [execute]);
+  const handleMoveReferee = useCallback(async () => {
+    try {
+      setMessages(prev => ({ ...prev, moveReferee: 'Moving...' }));
+      const result = await moveRefereeTraining.execute();
+      setMessages(prev => ({ 
+        ...prev, 
+        moveReferee: `Moved ${result.moved?.length || 0} files to ${result.dst || 'destination'}` 
+      }));
+      return result;
+    } catch (err) {
+      setMessages(prev => ({ ...prev, moveReferee: `Error: ${err.message}` }));
+      throw err;
+    }
+  }, [moveRefereeTraining]);
+
+  const handleMoveSignal = useCallback(async () => {
+    try {
+      setMessages(prev => ({ ...prev, moveSignal: 'Moving...' }));
+      const result = await moveSignalTraining.execute();
+      setMessages(prev => ({ 
+        ...prev, 
+        moveSignal: `Moved ${result.moved?.length || 0} files to ${result.dst || 'destination'}` 
+      }));
+      return result;
+    } catch (err) {
+      setMessages(prev => ({ ...prev, moveSignal: `Error: ${err.message}` }));
+      throw err;
+    }
+  }, [moveSignalTraining]);
+
+  const handleDeleteReferee = useCallback(async () => {
+    if (!window.confirm('Are you sure you want to delete all referee training data? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      setMessages(prev => ({ ...prev, deleteReferee: 'Deleting...' }));
+      const result = await deleteRefereeTraining.execute();
+      setMessages(prev => ({ 
+        ...prev, 
+        deleteReferee: `Deleted ${result.deleted_count || 0} referee training files` 
+      }));
+      return result;
+    } catch (err) {
+      setMessages(prev => ({ ...prev, deleteReferee: `Error: ${err.message}` }));
+      throw err;
+    }
+  }, [deleteRefereeTraining]);
+
+  const handleDeleteSignal = useCallback(async () => {
+    if (!window.confirm('Are you sure you want to delete all signal training data? This action cannot be undone.')) {
+      return;
+    }
+
+    try {
+      setMessages(prev => ({ ...prev, deleteSignal: 'Deleting...' }));
+      const result = await deleteSignalTraining.execute();
+      setMessages(prev => ({ 
+        ...prev, 
+        deleteSignal: `Deleted ${result.deleted_count || 0} signal training files` 
+      }));
+      return result;
+    } catch (err) {
+      setMessages(prev => ({ ...prev, deleteSignal: `Error: ${err.message}` }));
+      throw err;
+    }
+  }, [deleteSignalTraining]);
 
   return {
-    loading,
-    error,
-    moveRefereeTraining,
-    moveSignalTraining
+    messages,
+    actions: {
+      moveReferee: handleMoveReferee,
+      moveSignal: handleMoveSignal,
+      deleteReferee: handleDeleteReferee,
+      deleteSignal: handleDeleteSignal
+    },
+    loading: {
+      moveReferee: moveRefereeTraining.loading,
+      moveSignal: moveSignalTraining.loading,
+      deleteReferee: deleteRefereeTraining.loading,
+      deleteSignal: deleteSignalTraining.loading
+    }
   };
-};
-
-export default useApi; 
+} 

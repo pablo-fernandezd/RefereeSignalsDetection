@@ -5,54 +5,74 @@
  * including API endpoints, configuration values, and UI constants.
  */
 
-// API Configuration
+/**
+ * Application Constants
+ * 
+ * Centralized configuration values for the frontend application
+ */
+
 export const API_CONFIG = {
   BASE_URL: process.env.REACT_APP_API_URL || 'http://localhost:5000',
   TIMEOUT: 30000, // 30 seconds
-  RETRY_ATTEMPTS: 3
+  RETRY_ATTEMPTS: 3,
+  ENDPOINTS: {
+    // Image endpoints
+    UPLOAD: '/api/upload',
+    PENDING_IMAGES: '/api/pending_images',
+    CONFIRM_CROP: '/api/confirm_crop',
+    MANUAL_CROP: '/api/manual_crop',
+    PROCESS_CROP_FOR_SIGNAL: '/api/process_crop_for_signal',
+    CONFIRM_SIGNAL: '/api/confirm_signal',
+    
+    // Training data endpoints
+    REFEREE_TRAINING_COUNT: '/api/referee_training_count',
+    SIGNAL_CLASSES: '/api/signal_classes',
+    SIGNAL_CLASS_COUNTS: '/api/signal_class_counts',
+    MOVE_REFEREE_TRAINING: '/api/move_referee_training',
+    MOVE_SIGNAL_TRAINING: '/api/move_signal_training',
+    DELETE_REFEREE_TRAINING: '/api/delete_referee_training_data',
+    DELETE_SIGNAL_TRAINING: '/api/delete_signal_training_data',
+    
+    // YouTube endpoints
+    YOUTUBE_AUTOLABELED: '/api/youtube/autolabeled/all',
+    YOUTUBE_SIGNAL_DETECTIONS: '/api/youtube/signal_detections/all',
+  }
 };
 
-// API Endpoints
-export const API_ENDPOINTS = {
-  // Image processing endpoints
-  UPLOAD: '/api/upload',
-  CONFIRM_CROP: '/api/confirm_crop',
-  MANUAL_CROP: '/api/manual_crop',
-  PROCESS_SIGNAL: '/api/process_signal',
-  CONFIRM_SIGNAL: '/api/confirm_signal',
-  
-  // Queue management endpoints
-  PENDING_IMAGES: '/api/pending_images',
-  PROCESS_QUEUED_IMAGE_REFEREE: '/api/process_queued_image_referee',
-  PROCESS_CROP_FOR_SIGNAL: '/api/process_crop_for_signal',
-  DELETE_QUEUED_IMAGE: '/api/queue/image',
-  
-  // Training data endpoints
-  REFEREE_TRAINING_COUNT: '/api/referee_training_count',
-  SIGNAL_CLASSES: '/api/signal_classes',
-  SIGNAL_CLASS_COUNTS: '/api/signal_class_counts',
-  MOVE_REFEREE_TRAINING: '/api/move_referee_training',
-  MOVE_SIGNAL_TRAINING: '/api/move_signal_training',
-  
-  // YouTube processing endpoints
-  YOUTUBE_PROCESS: '/api/youtube/process',
-  YOUTUBE_STATUS: '/api/youtube/status',
-  YOUTUBE_VIDEOS: '/api/youtube/videos',
-  YOUTUBE_VIDEO_FRAMES: '/api/youtube/video',
-  YOUTUBE_VIDEO_DELETE: '/api/youtube/video',
-  YOUTUBE_LABEL_FRAMES: '/api/youtube/video',
-  YOUTUBE_ADD_TO_TRAINING: '/api/youtube/video',
-  YOUTUBE_DETECT_SIGNALS: '/api/youtube/video',
-  YOUTUBE_AUTOLABEL_FRAMES: '/api/youtube/video',
-  
-  // File serving endpoints
-  CROP_IMAGE: '/api/crop',
-  REFEREE_CROP_IMAGE: '/api/referee_crop_image',
-  UPLOADED_IMAGE: '/api/uploads',
-  YOUTUBE_ASSET_FILE: '/api/youtube/data',
-  
-  // Auto-labeling endpoints
-  AUTOLABEL_PENDING_COUNT: '/api/autolabel/pending_count'
+export const APP_VIEWS = {
+  DASHBOARD: 'dashboard',
+  UPLOAD: 'upload',
+  YOUTUBE: 'youtube',
+  TRAINING: 'training',
+  MODELS: 'models',
+  LABELING_QUEUE: 'labelingQueue'
+};
+
+export const UPLOAD_STEPS = {
+  UPLOAD_FORM: 0,
+  CROP_CONFIRMATION: 1,
+  SIGNAL_CONFIRMATION: 2,
+  MANUAL_CROP: 3
+};
+
+export const THEMES = {
+  LIGHT: 'light',
+  DARK: 'dark'
+};
+
+export const STORAGE_KEYS = {
+  THEME: 'theme'
+};
+
+export const DEFAULT_STATE = {
+  REFEREE_COUNTS: { positive: 0, negative: 0 },
+  SIGNAL_CLASSES: [],
+  SIGNAL_CLASS_COUNTS: {},
+  PENDING_COUNTS: {
+    images: 0,
+    autolabeled: 0,
+    signalDetections: 0
+  }
 };
 
 // Referee Detection Classes
@@ -78,12 +98,6 @@ export const UI_CONSTANTS = {
     { key: 'labelingQueue', label: 'Labeling Queue', icon: '🏷️' }
   ],
   
-  // Themes
-  THEMES: {
-    LIGHT: 'light',
-    DARK: 'dark'
-  },
-  
   // File upload limits
   MAX_FILE_SIZE: 100 * 1024 * 1024, // 100MB
   ALLOWED_IMAGE_TYPES: ['image/jpeg', 'image/jpg', 'image/png'],
@@ -96,14 +110,6 @@ export const UI_CONSTANTS = {
     COMPLETED: 'completed',
     ERROR: 'error'
   },
-  
-  // Workflow steps
-  UPLOAD_WORKFLOW_STEPS: {
-    UPLOAD: 0,
-    CROP_CONFIRMATION: 1,
-    SIGNAL_CONFIRMATION: 2,
-    MANUAL_CROP: 3
-  }
 };
 
 // YouTube Processing Constants
@@ -148,13 +154,6 @@ export const SUCCESS_MESSAGES = {
   TRAINING_DATA_MOVED: 'Training data moved successfully!'
 };
 
-// Local Storage Keys
-export const STORAGE_KEYS = {
-  THEME: 'referee_detection_theme',
-  USER_PREFERENCES: 'referee_detection_preferences',
-  RECENT_UPLOADS: 'referee_detection_recent_uploads'
-};
-
 // Animation and Timing Constants
 export const ANIMATION_CONSTANTS = {
   FADE_DURATION: 300,
@@ -178,14 +177,13 @@ export const COLOR_SCHEME = {
 
 export default {
   API_CONFIG,
-  API_ENDPOINTS,
   REFEREE_CLASSES,
   SIGNAL_CLASSES,
   UI_CONSTANTS,
   YOUTUBE_CONSTANTS,
   ERROR_MESSAGES,
   SUCCESS_MESSAGES,
-  STORAGE_KEYS,
+  DEFAULT_STATE,
   ANIMATION_CONSTANTS,
   COLOR_SCHEME
 }; 

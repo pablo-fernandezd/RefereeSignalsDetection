@@ -235,7 +235,7 @@ def delete_model(model_id):
 
 @model_bp.route('/edit/<model_id>', methods=['PUT'])
 def edit_model(model_id):
-    """Edit model metadata (description, tags, etc.)."""
+    """Edit model metadata (description, tags, version, etc.)."""
     try:
         data = request.get_json()
         
@@ -248,7 +248,8 @@ def edit_model(model_id):
             description=data.get('description'),
             tags=data.get('tags', []),
             performance_metrics=data.get('performance_metrics', {}),
-            training_config=data.get('training_config', {})
+            training_config=data.get('training_config', {}),
+            version=data.get('version')
         )
         
         if success:

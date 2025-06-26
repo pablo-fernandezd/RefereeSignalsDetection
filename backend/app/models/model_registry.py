@@ -727,8 +727,9 @@ class ModelRegistry:
     def update_model_metadata(self, model_id: str, description: Optional[str] = None, 
                             tags: Optional[List[str]] = None, 
                             performance_metrics: Optional[Dict[str, Any]] = None,
-                            training_config: Optional[Dict[str, Any]] = None) -> Tuple[bool, str]:
-        """Update model metadata (description, tags, metrics, etc.)."""
+                            training_config: Optional[Dict[str, Any]] = None,
+                            version: Optional[str] = None) -> Tuple[bool, str]:
+        """Update model metadata (description, tags, metrics, version, etc.)."""
         try:
             for models in self.models.values():
                 for model in models:
@@ -742,6 +743,8 @@ class ModelRegistry:
                             model.performance_metrics.update(performance_metrics)
                         if training_config is not None:
                             model.training_config.update(training_config)
+                        if version is not None:
+                            model.version = version
                         
                         # Update modified timestamp
                         model.last_used = datetime.now().isoformat()

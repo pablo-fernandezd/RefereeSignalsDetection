@@ -13,34 +13,18 @@ from pathlib import Path
 from flask import Flask
 from flask_cors import CORS
 
-# Add the parent directory to the Python path to allow imports
-sys.path.append(str(Path(__file__).parent.parent))
+# Import configurations and routes using relative imports
+from config.settings import (
+    FlaskConfig, CORSConfig, LoggingConfig, ModelConfig,
+    ensure_directories
+)
+from routes.image_routes import image_bp
+from routes.training_routes import training_bp
+from routes.youtube_routes import youtube_bp
+from routes.queue_routes import queue_bp
+from routes.model_routes import model_bp
 
-# Import with proper path handling
-try:
-    from config.settings import (
-        FlaskConfig, CORSConfig, LoggingConfig, ModelConfig,
-        ensure_directories
-    )
-    from routes.image_routes import image_bp
-    from routes.training_routes import training_bp
-    from routes.youtube_routes import youtube_bp
-    from routes.queue_routes import queue_bp
-    from routes.model_routes import model_bp
-except ImportError:
-    # Try alternative import paths
-    sys.path.append(str(Path(__file__).parent))
-    sys.path.append(str(Path(__file__).parent.parent / 'config'))
-    
-    from config.settings import (
-        FlaskConfig, CORSConfig, LoggingConfig, ModelConfig,
-        ensure_directories
-    )
-    from routes.image_routes import image_bp
-    from routes.training_routes import training_bp
-    from routes.youtube_routes import youtube_bp
-    from routes.queue_routes import queue_bp
-    from routes.model_routes import model_bp
+logger = logging.getLogger(__name__)
 
 
 def setup_logging():
@@ -59,12 +43,12 @@ def setup_logging():
         ]
     )
     
-    # Set specific logger levels
+    # Set specific logger levels to reduce noise
     logging.getLogger('werkzeug').setLevel(logging.WARNING)
     logging.getLogger('ultralytics').setLevel(logging.WARNING)
 
 
-def create_app():
+def create_app() -> Flask:
     """
     Create and configure the Flask application.
     
@@ -76,6 +60,7 @@ def create_app():
     # Configure Flask settings
     app.config['SECRET_KEY'] = FlaskConfig.SECRET_KEY
     app.config['DEBUG'] = FlaskConfig.DEBUG
+    app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 100MB max file size
     
     # Setup CORS
     CORS(app, 
@@ -88,7 +73,7 @@ def create_app():
     # Setup logging
     setup_logging()
     
-    # Register blueprints
+    # Register blueprints with proper URL prefixes
     app.register_blueprint(image_bp, url_prefix='/api')
     app.register_blueprint(training_bp, url_prefix='/api')
     app.register_blueprint(youtube_bp, url_prefix='/api/youtube')
@@ -98,14 +83,14 @@ def create_app():
     # Register error handlers
     register_error_handlers(app)
     
-    logger = logging.getLogger(__name__)
     logger.info("Referee Detection System initialized successfully")
     logger.info(f"Debug mode: {app.config['DEBUG']}")
+    logger.info(f"Host: {FlaskConfig.HOST}:{FlaskConfig.PORT}")
     
     return app
 
 
-def register_error_handlers(app):
+def register_error_handlers(app: Flask) -> None:
     """
     Register global error handlers for the application.
     
@@ -114,20 +99,26 @@ def register_error_handlers(app):
     """
     @app.errorhandler(404)
     def not_found_error(error):
+        """Handle 404 Not Found errors."""
+        logger.warning(f"404 error: {error}")
         return {'error': 'Resource not found'}, 404
     
     @app.errorhandler(500)
     def internal_error(error):
-        logger = logging.getLogger(__name__)
-        logger.error(f"Internal server error: {error}")
+        """Handle 500 Internal Server errors."""
+        logger.error(f"Internal server error: {error}", exc_info=True)
         return {'error': 'Internal server error'}, 500
     
     @app.errorhandler(413)
     def file_too_large(error):
-        return {'error': 'File too large'}, 413
+        """Handle 413 Request Entity Too Large errors."""
+        logger.warning(f"File too large: {error}")
+        return {'error': 'File too large. Maximum size is 100MB.'}, 413
     
     @app.errorhandler(400)
     def bad_request(error):
+        """Handle 400 Bad Request errors."""
+        logger.warning(f"Bad request: {error}")
         return {'error': 'Bad request'}, 400
 
 
@@ -146,7 +137,8 @@ def health_check():
     return {
         'status': 'healthy',
         'service': 'Referee Detection System',
-        'version': '2.0.0'
+        'version': '2.0.0',
+        'timestamp': LoggingConfig.LOG_FILE.parent.name
     }
 
 
@@ -158,17 +150,16 @@ def system_info():
     Returns:
         dict: System configuration and status information
     """
-    from models.inference_engine import InferenceEngine
-    
     try:
         # Don't load models during startup for faster initialization
         model_info = {
             'status': 'Models will be loaded on first use',
             'referee_model': str(ModelConfig.REFEREE_MODEL_PATH.name),
-            'signal_model': str(ModelConfig.SIGNAL_MODEL_PATH.name)
+            'signal_model': str(ModelConfig.SIGNAL_MODEL_PATH.name),
+            'referee_model_exists': ModelConfig.REFEREE_MODEL_PATH.exists(),
+            'signal_model_exists': ModelConfig.SIGNAL_MODEL_PATH.exists()
         }
     except Exception as e:
-        logger = logging.getLogger(__name__)
         logger.error(f"Failed to get model info: {e}")
         model_info = {'error': 'Failed to get model information'}
     
@@ -176,14 +167,25 @@ def system_info():
         'system': 'Referee Detection System',
         'version': '2.0.0',
         'debug_mode': app.config['DEBUG'],
-        'models': model_info
+        'models': model_info,
+        'directories': {
+            'upload_folder': str(DirectoryConfig.UPLOAD_FOLDER),
+            'crops_folder': str(DirectoryConfig.CROPS_FOLDER),
+            'referee_training': str(DirectoryConfig.REFEREE_TRAINING_DATA_FOLDER),
+            'signal_training': str(DirectoryConfig.SIGNAL_TRAINING_DATA_FOLDER)
+        }
     }
 
 
 if __name__ == '__main__':
     # Run the application
-    app.run(
-        host=FlaskConfig.HOST,
-        port=FlaskConfig.PORT,
-        debug=FlaskConfig.DEBUG
-    ) 
+    try:
+        app.run(
+            host=FlaskConfig.HOST,
+            port=FlaskConfig.PORT,
+            debug=FlaskConfig.DEBUG,
+            threaded=True
+        )
+    except Exception as e:
+        logger.error(f"Failed to start application: {e}")
+        sys.exit(1) 

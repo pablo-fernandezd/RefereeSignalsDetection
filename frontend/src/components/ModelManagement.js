@@ -16,6 +16,7 @@ const ModelManagement = () => {
     const [downloadingModel, setDownloadingModel] = useState(null);
     const [editingModel, setEditingModel] = useState(null);
     const [editFormData, setEditFormData] = useState({
+        version: '',
         description: '',
         tags: '',
         performance_metrics: {},
@@ -226,6 +227,7 @@ const ModelManagement = () => {
     const startEditModel = (model) => {
         setEditingModel(model.model_id);
         setEditFormData({
+            version: model.version || '',
             description: model.description || '',
             tags: (model.tags || []).join(', '),
             performance_metrics: model.performance_metrics || {},
@@ -237,6 +239,7 @@ const ModelManagement = () => {
     const cancelEdit = () => {
         setEditingModel(null);
         setEditFormData({
+            version: '',
             description: '',
             tags: '',
             performance_metrics: {},
@@ -255,6 +258,7 @@ const ModelManagement = () => {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
+                    version: editFormData.version,
                     description: editFormData.description,
                     tags: tagsArray,
                     performance_metrics: editFormData.performance_metrics,
@@ -479,6 +483,16 @@ const ModelManagement = () => {
                                         </div>
                                         
                                         <div className="edit-form">
+                                            <div className="form-group">
+                                                <label>Version:</label>
+                                                <input
+                                                    type="text"
+                                                    value={editFormData.version}
+                                                    onChange={(e) => setEditFormData({...editFormData, version: e.target.value})}
+                                                    placeholder="Model version..."
+                                                />
+                                            </div>
+                                            
                                             <div className="form-group">
                                                 <label>Description:</label>
                                                 <textarea
