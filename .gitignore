@@ -16,3 +16,4 @@ data/youtube_videos/*
 node_modules/
 static/referee_crops/
 static/uploads/*.jpg
+*.pyc
